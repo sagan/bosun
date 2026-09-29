@@ -713,5 +713,10 @@
     "applyConfirm": "Templates for mihomo, Stash, Surge, Surfboard, Loon, Quantumult X and Egern will be generated and overwrite the current ones.",
     "applied": "Templates generated and applied",
     "applyHint": "Generated templates can still be hand-edited under \"Text\"; the next \"Generate & apply\" overwrites those edits. Placeholders:"
+  },
+  "accountID": {
+    "label": "Account ID",
+    "change": "Change ID",
+    "hint": "Use an unused positive integer. Subscription links, credentials and existing records are preserved."
   }
 }

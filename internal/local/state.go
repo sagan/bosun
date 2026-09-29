@@ -26,7 +26,8 @@ const (
 
 // State is the whole standalone configuration, persisted as one JSON file.
 type State struct {
-	Revision int64 `json:"revision"`
+	Revision            int64 `json:"revision"`
+	UserTrafficSequence int64 `json:"user_traffic_sequence,omitempty"`
 
 	Admin Admin `json:"admin"`
 	// APITokens grant the same access as the admin login (standalone only).
@@ -232,12 +233,13 @@ type Inbound struct {
 
 // User is a local subscriber with its own accounting.
 type User struct {
-	ID       int64  `json:"id"`
-	Name     string `json:"name"`
-	UUID     string `json:"uuid"`
-	Password string `json:"password"`
-	SubToken string `json:"sub_token"`
-	Enabled  bool   `json:"enabled"`
+	TrafficID int64  `json:"traffic_id,omitempty"` // immutable core accounting identity
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	UUID      string `json:"uuid"`
+	Password  string `json:"password"`
+	SubToken  string `json:"sub_token"`
+	Enabled   bool   `json:"enabled"`
 
 	QuotaBytes int64      `json:"quota_bytes"` // 0 = unlimited
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
@@ -298,7 +300,7 @@ func (u User) Spec() spec.User {
 	if pw == "" {
 		pw = u.UUID
 	}
-	return spec.User{ID: u.ID, Name: u.UUID, UUID: u.UUID, Password: pw, DeviceLimit: u.DeviceLimit, SpeedLimitMbps: u.SpeedLimitMbps}
+	return spec.User{ID: u.AccountingID(), Name: u.UUID, UUID: u.UUID, Password: pw, DeviceLimit: u.DeviceLimit, SpeedLimitMbps: u.SpeedLimitMbps}
 }
 
 // QuotaWindow is the rolling window a core-side quota should use: the
@@ -324,4 +326,12 @@ func (u User) QuotaWindow(now time.Time) (bytes int64, days int) {
 		return u.QuotaBytes, d
 	}
 	return u.QuotaBytes, 36500
+}
+
+// AccountingID also understands state files written before IDs were editable.
+func (u User) AccountingID() int64 {
+	if u.TrafficID > 0 {
+		return u.TrafficID
+	}
+	return u.ID
 }

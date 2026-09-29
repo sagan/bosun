@@ -713,5 +713,10 @@
     "applyConfirm": "将为 mihomo、Stash、Surge、Surfboard、Loon、Quantumult X、Egern 生成模板并覆盖现有模板。",
     "applied": "模板已生成并应用",
     "applyHint": "生成的模板可以在\"文本\"里继续手改；下次再\"生成并应用\"会覆盖手改。占位符："
+  },
+  "accountID": {
+    "label": "账号 ID",
+    "change": "修改 ID",
+    "hint": "请输入未被占用的正整数。订阅链接、认证凭据和已有记录保持不变。"
   }
 }

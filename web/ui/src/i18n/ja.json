@@ -713,5 +713,10 @@
     "applyConfirm": "mihomo、Stash、Surge、Surfboard、Loon、Quantumult X、Egern のテンプレートを生成し、現在のものを上書きします。",
     "applied": "テンプレートを生成して適用しました",
     "applyHint": "生成後も「テキスト」で手直しできますが、次の「生成して適用」で上書きされます。プレースホルダー："
+  },
+  "accountID": {
+    "label": "アカウント ID",
+    "change": "ID を変更",
+    "hint": "未使用の正の整数を入力してください。購読リンク、認証情報、既存の記録は保持されます。"
   }
 }

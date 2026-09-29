@@ -87,7 +87,7 @@ func linksFor(u local.User, inbounds []local.Inbound, settings local.Settings, f
 		h, p, name := endpointFor(ib, settings, byID, fallbackHost)
 		uri := shareURI(ib.Inbound, h, p, name, u.Spec())
 		if ib.Protocol == spec.WireGuard {
-			uri = subscription.WGConf(subscription.Line{Name: name, Host: h, Port: p, Inbound: ib.Inbound, UUID: u.UUID, UserID: u.ID})
+			uri = subscription.WGConf(subscription.Line{Name: name, Host: h, Port: p, Inbound: ib.Inbound, UUID: u.UUID, UserID: u.AccountingID()})
 		}
 		if uri != "" {
 			out = append(out, Link{Tag: ib.Tag, Name: name, URI: uri})

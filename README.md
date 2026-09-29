@@ -279,6 +279,18 @@ a notice every six hours when a newer release exists.
 cores are reconfigured or restarted as needed. Users get per-user quota and expiry,
 traffic counters, share links and a `/sub/<token>` subscription whose format follows the client (Clash/mihomo YAML, sing-box JSON, Surge, Loon, Quantumult X, Stash, Surfboard, else a base64 URI list; `?client=` forces one). The renderers live in `pkg/subscription`, which Captain imports too.
 
+Users → Edit → Change ID assigns an unused positive integer (up to
+9007199254740991), preserving credentials, subscription URLs and traffic
+counters. The API is `PUT /api/users/{id}/id` with `{"id":42}`; it returns
+the new ID. A separate immutable accounting ID keeps delayed core traffic
+with the same user even if the old visible ID is reused. In managed mode,
+change user IDs in Captain instead.
+
+Standalone accounts are separate objects in `local.json`, not SQL tables:
+`admin` is the single console login and `users` contains subscribers. The
+administrator has no numeric ID and does not consume user numbers. Its
+username can be changed under Settings without creating a subscriber.
+
 The standalone panel carries the same node-side features as Captain's node
 page: line ingresses (IPLC / dedicated NICs: inbounds bind to the line
 address, share links advertise the provider's entry or its domain on the

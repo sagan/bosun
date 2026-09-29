@@ -168,6 +168,7 @@ func (s *Server) routes() {
 
 	m.HandleFunc("GET /api/users", auth(s.listUsers))
 	m.HandleFunc("POST /api/users", auth(s.local(s.createUser)))
+	m.HandleFunc("PUT /api/users/{id}/id", auth(s.local(s.changeUserID)))
 	m.HandleFunc("PUT /api/users/{id}", auth(s.local(s.updateUser)))
 	m.HandleFunc("DELETE /api/users/{id}", auth(s.local(s.deleteUser)))
 	m.HandleFunc("POST /api/users/{id}/reset", auth(s.local(s.resetUser)))
@@ -1036,4 +1037,24 @@ func asciiName(name string) string {
 		out = "bosun"
 	}
 	return out
+}
+
+func (s *Server) changeUserID(w http.ResponseWriter, r *http.Request) {
+	id, err := userID(r)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	var in struct {
+		ID int64 `json:"id"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.d.Store.ChangeUserID(id, in.ID); err != nil {
+		storeErr(w, err)
+		return
+	}
+	ok(w, map[string]int64{"id": in.ID})
 }

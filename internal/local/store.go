@@ -87,6 +87,7 @@ func Open(path string, log *slog.Logger) (*Store, string, error) {
 	if s.st.Mode == "" {
 		s.st.Mode = ModeLocal
 	}
+	s.normalizeTrafficIDs()
 	s.loadHistory()
 	return s, initial, nil
 }
@@ -124,6 +125,7 @@ func (s *Store) Reload() error {
 		st.Revision = s.st.Revision + 1
 	}
 	s.st = st
+	s.normalizeTrafficIDs()
 	s.history = nil
 	s.loadHistory()
 	if err := s.saveLocked(); err != nil {
@@ -486,6 +488,12 @@ func (s *Store) CreateUser(u User) (User, error) {
 			return User{}, errors.New("uuid already exists")
 		}
 	}
+	if maxID >= 9007199254740991 {
+		return User{}, errors.New("account ID range exhausted")
+	}
+	s.normalizeTrafficIDs()
+	s.st.UserTrafficSequence++
+	u.TrafficID = s.st.UserTrafficSequence
 	u.ID = maxID + 1
 	s.st.Users = append(s.st.Users, u)
 	return u, s.commit()
@@ -681,6 +689,7 @@ func (s *Store) Detach(keep *agentproto.State) error {
 		s.st.Inbounds, s.st.Users, s.st.Forwards = nil, nil, nil
 		s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates = nil, nil, nil, "", nil
 	}
+	s.normalizeTrafficIDs()
 	s.st.Snapshot = nil
 	s.st.Managed = nil
 	s.st.Mode = ModeLocal
@@ -866,7 +875,7 @@ func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error)
 	now := time.Now()
 	byID := map[int64]int{}
 	for i, u := range s.st.Users {
-		byID[u.ID] = i
+		byID[u.AccountingID()] = i
 	}
 	var dayUp, dayDown int64
 	changed := false
@@ -989,4 +998,57 @@ func (s *Store) Runtime() Runtime {
 	}
 	return Runtime{Host: s.host, Cores: s.cores, Forwards: append([]agentproto.ForwardStatus(nil), s.forwardStatus...),
 		Online: online, OverDevices: over, LastReport: s.lastReport, History: append([]DayPoint(nil), s.history...), Revision: s.st.Revision}
+}
+
+// normalizeTrafficIDs is called before any legacy ID can change or disappear.
+func (s *Store) normalizeTrafficIDs() {
+	normalize := func(users []User) {
+		for i := range users {
+			u := &users[i]
+			u.TrafficID = u.AccountingID()
+			if u.TrafficID > s.st.UserTrafficSequence {
+				s.st.UserTrafficSequence = u.TrafficID
+			}
+		}
+	}
+	normalize(s.st.Users)
+	if s.st.Snapshot != nil {
+		normalize(s.st.Snapshot.Users)
+	}
+}
+
+func (s *Store) ChangeUserID(oldID, newID int64) error {
+	if oldID <= 0 || newID <= 0 || newID > 9007199254740991 {
+		return errors.New("ID must be a positive safe integer")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	idx := -1
+	for i, u := range s.st.Users {
+		if u.ID == oldID {
+			idx = i
+		}
+		if u.ID == newID && oldID != newID {
+			return errors.New("ID is already in use")
+		}
+	}
+	if idx < 0 {
+		return ErrNotFound
+	}
+	if oldID == newID {
+		return nil
+	}
+	previous, revision := s.st.Users[idx], s.st.Revision
+	s.st.Users[idx].TrafficID = previous.AccountingID()
+	s.st.Users[idx].ID = newID
+	if err := s.commit(); err != nil {
+		s.st.Users[idx] = previous
+		s.st.Revision = revision
+		return err
+	}
+	if until, ok := s.overDevices[oldID]; ok {
+		s.overDevices[newID] = until
+		delete(s.overDevices, oldID)
+	}
+	return nil
 }

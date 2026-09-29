@@ -713,5 +713,10 @@
     "applyConfirm": "將為 mihomo、Stash、Surge、Surfboard、Loon、Quantumult X、Egern 產生範本並覆蓋現有範本。",
     "applied": "範本已產生並套用",
     "applyHint": "產生的範本可以在「文字」裡繼續手改；下次再「產生並套用」會覆蓋手改。佔位符："
+  },
+  "accountID": {
+    "label": "帳號 ID",
+    "change": "修改 ID",
+    "hint": "請輸入未被使用的正整數。訂閱連結、認證憑證和現有記錄保持不變。"
   }
 }

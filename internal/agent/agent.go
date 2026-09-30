@@ -318,14 +318,14 @@ func (a *Agent) Run(ctx context.Context) error {
 			// config file; results only show up on /metrics and in the
 			// local UI.
 			if src, ok := a.driver.(panel.ProbeSource); ok {
-				a.probes.Configure(ctx, src.Probe())
+				a.configureProbe(ctx, src.Probe())
 			} else {
-				a.probes.Configure(ctx, a.cfg.Probe.Spec())
+				a.configureProbe(ctx, a.cfg.Probe.Spec())
 			}
 			return
 		}
 		cfg := beater.Probe()
-		a.probes.Configure(ctx, cfg)
+		a.configureProbe(ctx, cfg)
 		want := time.Duration(0)
 		if cfg != nil && cfg.Enabled {
 			want = 10 * time.Second
@@ -378,9 +378,11 @@ func (a *Agent) Run(ctx context.Context) error {
 			if beater != nil {
 				bctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 				host := a.sampler.Sample(bctx)
-				host.Pings = a.probes.Results()
+				host.Pings = a.probes.Batch()
 				if err := beater.Beat(bctx, agentproto.Beat{Host: host}); err != nil {
 					a.log.Warn("beat failed", "err", err)
+				} else {
+					a.probes.Acknowledge(host.Pings)
 				}
 				cancel()
 			}
@@ -568,4 +570,16 @@ func (a *Agent) stopAll() {
 			}
 		}
 	}
+}
+
+// SampleHost shares resource baselines with reports, beats and exporters.
+func (a *Agent) SampleHost(ctx context.Context) spec.SystemStatus { return a.sampler.Sample(ctx) }
+
+func (a *Agent) configureProbe(ctx context.Context, cfg *spec.Probe) {
+	var options *spec.ResourceOptions
+	if cfg != nil {
+		options = cfg.Resources
+	}
+	a.sampler.Configure(options)
+	a.probes.Configure(ctx, cfg)
 }

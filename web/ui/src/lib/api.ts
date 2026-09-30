@@ -1,3 +1,5 @@
+import type { NetworkSample } from './network'
+import type { ResourceHost, ResourceOptions } from "./resources"
 // Minimal typed fetch wrapper. Sessions are cookies, so nothing to attach.
 export class ApiError extends Error {
   status: number
@@ -65,7 +67,7 @@ export interface ShaperStatus { supported: boolean; interface?: string; users: n
 export interface AgentStatus { decoy?: DecoyStatus; shaper?: ShaperStatus; panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }
 export interface Status {
   version: string; uptime_seconds: number; mode: Mode; fixed: string; managed: { url: string; paired_at: string } | null; has_snapshot: boolean
-  agent: AgentStatus | null; host: Host; forwards: ForwardStatus[]; online_users: number; users: number; inbounds: number
+  agent: AgentStatus | null; host: Host & ResourceHost; forwards: ForwardStatus[]; online_users: number; users: number; inbounds: number
   total_up: number; total_down: number; history: { day: number; up: number; down: number }[]; last_report: string
   certs: CertStatus[]; pings?: Ping[]
 }
@@ -91,8 +93,8 @@ export interface Routing { outbounds: Outbound[]; routes: Rule[]; default_outbou
 // Operator-supplied certificates handed to the cores.
 export interface Certificate { domain: string; names: string[]; not_after: string; issuer: string }
 // Probe: carrier latency, tasks and line RTT.
-export interface Ping { task_id: number; name: string; latency_ms: number; loss?: number; mbps?: number; at?: number }
+export type Ping = NetworkSample
 export interface Carrier { name: string; addr: string }
 export interface ProbeTask { id: number; name: string; type: string; target: string; interval_seconds: number; source_ip: string }
-export interface ProbeSettings { enabled: boolean; carrier_ping: boolean; carriers: Carrier[]; tasks: ProbeTask[] }
+export interface ProbeSettings { resources?: ResourceOptions; enabled: boolean; carrier_ping: boolean; carriers: Carrier[]; tasks: ProbeTask[] }
 export interface ProbeInfo { settings: ProbeSettings; results: Ping[]; defaults: Carrier[] }

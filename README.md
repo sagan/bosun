@@ -113,6 +113,7 @@ internal/realityscan/ REALITY target scanner with CDN detection
 internal/warp/        Cloudflare WARP registration and WireGuard outbound
 internal/shaper/      per-user bandwidth limits with nft connmark + tc
 internal/probe/       latency checks for the panel's status page (carrier probe points, icmp/tcp/http/download tasks), attached to every beat
+internal/netdiag/     bounded on-demand DNS, service, download and route diagnostics
 internal/komari/      reports the node to a Komari server as an agent
 internal/dstatus/     answers a DStatus panel's scrapes as a neko-status agent
 internal/doctor/      read-only self-check (listeners, certs, ports, firewall, disk, panel, clock)
@@ -199,15 +200,49 @@ own identity in the core (Xray email / sing-box name `NAME|TAG`,
 so a panel can charge the inbound's own group. Panels that only know users
 (Xboard, the local panel) receive one summed entry per user.
 
+## Resource detail (v0.56)
+
+The standalone Overview and Captain node detail show logical CPU utilization,
+all discovered NIC counters/rates, local filesystem capacity/inodes, disk I/O
+throughput/IOPS, and CPU/RSS for bosun and supervised proxy/realm processes.
+Process CPU uses 100% per logical core. Missing readings and first/reset
+rate samples are null, displayed as **—**; measured zero is still zero.
+Sampling is serialized and cached for one second across reports, UI and
+external exporters; no second monitoring agent is required.
+
+In standalone Probe settings, set exact interface include/exclude lists for
+host traffic totals. Empty includes use the default loopback/Docker/veth/bridge
+filter, and explicit exclusions win. Captain controls this per managed node.
+The corresponding standalone YAML is `probe.resources.include_interfaces`
+and `probe.resources.exclude_interfaces` (lists). Selection only affects
+monitoring totals, never proxy-user billing. Remote filesystems are skipped
+to keep unavailable mounts from blocking reports. Device capacities and disk
+I/O are shown separately because partitions and virtual devices can overlap.
+Only supervised processes are inspected, without command-line enumeration.
+Detailed resources are private to management pages, not Captain's public page.
+
+GPU sampling is opt-in through the same resource settings, or
+`probe.resources.gpu: true`. Linux NVIDIA (`nvidia-smi`) and AMD (amdgpu
+sysfs/hwmon) provide utilization, VRAM, temperature and power where supported.
+Missing fields remain unknown; driver tools are not installed automatically.
+Other GPU vendors and operating systems are not supported in this batch.
+One asynchronous worker samples at most every 15 seconds, with a two-second
+command deadline, 64 KiB output and 32-device limit. A blocked driver cannot
+block host heartbeats or accumulate workers, even after disable/re-enable.
+The UI distinguishes disabled, pending, unavailable, failed and stale samples.
+Captain deduplicates GPU sample sequences for private resource history;
+standalone bosun shows current readings. GPU process enumeration is not enabled.
+
 ## Probe beats
 
-When Captain's probe page is on, the node sends a light host sample every
+When Captain's probe collection is on, the node sends a light host sample every
 few seconds (`POST /api/agent/beat`): CPU, memory, swap, disk, load, network
 rate and totals, TCP/UDP/process counts, uptime, IPv4/IPv6 reachability,
 static host facts, plus latency results: TCP-connect checks against the
 carrier probe points (CT/CU/CM by default; Captain can name its own; no
 ICMP privileges needed) and panel-defined tasks (icmp, tcp, http,
-download). Nothing runs while the panel keeps probing off.
+download). High-frequency beats and latency tasks stop when collection is off;
+minute host reports continue. Captain can disable its public page separately.
 
 Without Captain (local or Xboard driver) a `probe:` section in config.yaml
 runs the same checks and exposes them on `/metrics` as
@@ -221,9 +256,58 @@ probe:
     - { name: HK, addr: www.hkix.net:443 }
   tasks:
     - { name: cf, type: tcp, target: 1.1.1.1:443, interval_seconds: 30 }
-    # a dedicated line measured from its own NIC (tcp/icmp honour source_ip)
+    # a dedicated line measured from its own NIC (all task types honour source_ip)
     - { name: IPLC, type: tcp, target: 198.51.100.20:17701, source_ip: 10.10.0.2 }
 ```
+
+## Network quality (v0.56)
+
+Standalone **Probe** and Captain's node monitoring detail show the latest real
+attempt, its failure reason, HTTP status where applicable, and a rolling window
+of the last 30 attempts: failure ratio, min/max, P50/P95 and jitter. Jitter is the
+mean absolute difference between adjacent successful latencies; a failed attempt
+breaks the pair. Unsupported or incomplete phases display **—**.
+
+Periodic checks make one attempt per sample, with no best-of-retries filtering.
+ICMP sends one echo. Ordinary TCP checks require a successful connection; a
+refused carrier/line target still proves host reachability and is explicitly labelled
+as such. HTTP accepts 200–399 without following redirects; downloads require a
+2xx response and a nonempty body. HTTP timing separates DNS, TCP connection, TLS
+handshake and the wait from sending the request to its first response byte.
+Latency is measured to response headers; download throughput excludes that setup.
+These are probe-attempt failure ratios, not inferred network packet-loss rates.
+
+Captain beats carry up to 60 unacknowledged attempts per target. A successful
+beat acknowledges only that batch; readers of the local UI or exporters do not
+consume it. Reconfiguration starts a new sequence epoch and discards the old
+configuration's pending results. Captain 1.7 deduplicates these attempts and
+provides history; older panels retain their previous aggregate behavior. The
+standalone UI shows current/rolling results without a persistent history store.
+Komari's externally requested ping tasks retain their existing compatibility
+policy separately from these periodic probes.
+
+### On-demand diagnostics (v0.56)
+
+Standalone **Probe** also runs DNS A/AAAA lookup (optional resolver IP/port), TCP
+connection checks, HTTP status/phase timing, bounded download throughput and
+MTR/traceroute reports. `POST /api/diagnostics/network` takes a typed request
+(`type`, `target`, optional `source_ip`, DNS-only `resolver`), requires the local
+administrator and rejects cross-origin requests. Managed nodes use Captain's
+node detail instead; Captain >= 1.7 queues the same checks for bosun >= 0.56.
+
+One check runs at a time per node, for at most 35 seconds. Downloads read at most
+64 MiB or 8 seconds of body transfer, require nonempty 2xx responses, verify TLS
+and do not follow redirects. The result measures that download, not total link
+capacity. Diagnostic traffic affects NIC totals, not proxy-user billing.
+
+Route checks require installed `mtr` / Linux `traceroute`; bosun reports missing
+tools without installing them. Fixed arguments cap routes at 20 hops (five rounds
+for MTR). A resolved literal IP is passed directly to the executable, never to a
+shell. Output is bounded at 32 KiB and rendered as escaped text. Successful tool
+exit means a completed report, not proof of destination reachability or loss.
+Captain tasks expire after two minutes; both ends check expiry. Node restarts may
+repeat an unexpired task before its result reaches Captain. Captain stores up to
+20 recent results from 24 hours; standalone keeps only the current page result.
 
 ## Komari reporting
 

@@ -66,9 +66,10 @@ type Deps struct {
 
 // Server is the panel HTTP handler.
 type Server struct {
-	d     Deps
-	mux   *http.ServeMux
-	start time.Time
+	sampler sysinfo.Sampler
+	d       Deps
+	mux     *http.ServeMux
+	start   time.Time
 
 	mu       sync.Mutex
 	agent    *agent.Agent
@@ -158,6 +159,7 @@ func (s *Server) routes() {
 	auth := s.requireAuth
 	m.HandleFunc("GET /api/me", auth(s.me))
 	m.HandleFunc("GET /api/status", auth(s.status))
+	m.HandleFunc("POST /api/diagnostics/network", auth(s.local(s.networkDiagnostic)))
 	m.HandleFunc("GET /api/logs", auth(s.logs))
 	m.HandleFunc("GET /api/cores", auth(s.cores))
 
@@ -483,7 +485,13 @@ func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
-	host := sysinfo.Snapshot(ctx)
+	var host spec.SystemStatus
+	if a := s.currentAgent(); a != nil {
+		host = a.SampleHost(ctx)
+	} else {
+		s.sampler.Configure(s.d.Store.ProbeSettings().Resources)
+		host = s.sampler.Sample(ctx)
+	}
 	if forwards == nil {
 		forwards = []agentproto.ForwardStatus{}
 	}

@@ -335,6 +335,11 @@ func (s *Store) ProbeSettings() ProbeSettings {
 
 // ValidateProbe checks carriers and tasks and numbers the tasks.
 func ValidateProbe(p *ProbeSettings) error {
+	if p.Resources != nil {
+		if err := p.Resources.Validate(); err != nil {
+			return err
+		}
+	}
 	seen := map[string]bool{}
 	carriers := []spec.Carrier{}
 	for i, c := range p.Carriers {
@@ -370,6 +375,9 @@ func ValidateProbe(p *ProbeSettings) error {
 		if t.Name == "" {
 			t.Name = t.Target
 		}
+		if err := t.Validate(); err != nil {
+			return fmt.Errorf("task %d: %w", i+1, err)
+		}
 		t.ID = int64(i + 1)
 		tasks = append(tasks, t)
 	}
@@ -384,6 +392,9 @@ func (s *Store) SetProbe(p ProbeSettings) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if p.Resources == nil {
+		p.Resources = s.st.Probe.Resources
+	}
 	s.st.Probe = p
 	return s.commit()
 }
@@ -395,9 +406,12 @@ func (s *Store) Probe() *spec.Probe {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.st.Probe.Enabled {
+		if s.st.Probe.Resources != nil {
+			return &spec.Probe{Resources: s.st.Probe.Resources}
+		}
 		return nil
 	}
-	p := &spec.Probe{Enabled: true, CarrierPing: s.st.Probe.CarrierPing, Carriers: append([]spec.Carrier(nil), s.st.Probe.Carriers...), Tasks: append([]spec.PingTask(nil), s.st.Probe.Tasks...)}
+	p := &spec.Probe{Resources: s.st.Probe.Resources, Enabled: true, CarrierPing: s.st.Probe.CarrierPing, Carriers: append([]spec.Carrier(nil), s.st.Probe.Carriers...), Tasks: append([]spec.PingTask(nil), s.st.Probe.Tasks...)}
 	for i, g := range s.st.Ingresses {
 		if g.BindIP == "" || g.LineIP == "" {
 			continue

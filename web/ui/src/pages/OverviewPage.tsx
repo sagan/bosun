@@ -1,4 +1,5 @@
-import { Alert, Badge, Card, Group, Progress, SimpleGrid, Skeleton, Stack, Table, Text } from '@mantine/core'
+import { ResourcesCard } from '../components/ResourcesCard'
+import { Alert, Badge, Card, SimpleGrid, Skeleton, Table, Text } from '@mantine/core'
 import { AreaChart } from '@mantine/charts'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -20,7 +21,6 @@ export default function OverviewPage() {
   const q = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const s = q.data
   const host = s?.host
-  const pct = (used?: number, total?: number) => (used && total ? Math.round((used / total) * 100) : 0)
   const series = (s?.history ?? []).map((d) => ({ day: new Date(d.day * 1000).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' }), GiB: +((d.up + d.down) / 2 ** 30).toFixed(3) }))
   const cores = Object.entries(s?.agent?.core_running ?? {})
   return (
@@ -52,17 +52,7 @@ export default function OverviewPage() {
           </InfoGrid>
         </Card>
       )}
-      <SimpleGrid cols={{ base: 1, md: 2 }} mb="lg">
-        <Card>
-          <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.host')}</Text>
-          {host && host.mem_total ? (
-            <Stack gap="xs">
-              <div><Group justify="space-between"><Text size="sm">CPU</Text><Text size="sm">{Math.round(host.cpu_percent ?? 0)}%</Text></Group><Progress value={host.cpu_percent ?? 0} size="sm" /></div>
-              <div><Group justify="space-between"><Text size="sm">{t('overview.memory')}</Text><Text size="sm">{bytes(host.mem_used ?? 0)} / {bytes(host.mem_total)}</Text></Group><Progress value={pct(host.mem_used, host.mem_total)} size="sm" color="grape" /></div>
-              <div><Group justify="space-between"><Text size="sm">{t('overview.disk')}</Text><Text size="sm">{bytes(host.disk_used ?? 0)} / {bytes(host.disk_total ?? 0)}</Text></Group><Progress value={pct(host.disk_used, host.disk_total)} size="sm" color="orange" /></div>
-            </Stack>
-          ) : <Text size="sm" c="dimmed">—</Text>}
-        </Card>
+      <ResourcesCard host={host} />
         <Card>
           <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.cores')}</Text>
           <Table>
@@ -78,7 +68,6 @@ export default function OverviewPage() {
             </Table.Tbody>
           </Table>
         </Card>
-      </SimpleGrid>
       {(s?.pings?.length ?? 0) > 0 && (
         <Card mb="lg">
           <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.latency')}</Text>

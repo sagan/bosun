@@ -1,3 +1,4 @@
+import { ResourceOptionsFields } from '../components/ResourceOptionsFields'
 import { ActionIcon, Button, Card, Group, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea, Title } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
@@ -9,7 +10,8 @@ import { api, type Carrier, type ProbeInfo, type ProbeSettings, type ProbeTask }
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
-import { PingList } from '../components/PingList'
+import { NetworkQualityTable } from '../components/NetworkQualityTable'
+import { NetworkDiagnosticsCard } from '../components/NetworkDiagnosticsCard'
 
 const parseCarriers = (text: string): Carrier[] => text.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const [name, ...rest] = l.split(/[\s,=]+/); return { name, addr: rest.join('') } })
 const carriersText = (c: Carrier[]) => c.map((x) => `${x.name} ${x.addr}`).join('\n')
@@ -37,15 +39,17 @@ export default function ProbePage() {
   return (
     <>
       <PageHeader title={t('probe.title')} subtitle={t('probe.subtitle')} />
+      {!readOnly && <NetworkDiagnosticsCard />}
       <Card mb="lg">
         <Title order={5} mb={4}>{t('probe.results')}</Title>
         <Text size="xs" c="dimmed" mb="sm">{t('probe.resultsHint')}</Text>
-        <PingList pings={q.data?.results ?? []} />
+        <NetworkQualityTable samples={q.data?.results ?? []} />
       </Card>
       <Card>
         <Title order={5} mb="xs">{t('probe.settings')}</Title>
         {readOnly && <Text size="xs" c="orange" mb="sm">{t('probe.managedHint')}</Text>}
         <Stack gap="sm">
+          <ResourceOptionsFields value={s.resources} onChange={(v) => setS((cur) => ({ ...cur, resources: v }))} disabled={readOnly} />
           <Group grow align="flex-end">
             <Switch label={t('probe.enabled')} description={t('probe.enabledHint')} disabled={readOnly} checked={s.enabled} onChange={(e) => setS({ ...s, enabled: e.currentTarget.checked })} />
             <Switch label={t('probe.carrier')} description={t('probe.carrierHint')} disabled={readOnly} checked={s.carrier_ping} onChange={(e) => setS({ ...s, carrier_ping: e.currentTarget.checked })} />

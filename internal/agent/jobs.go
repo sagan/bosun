@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/netdiag"
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/realityscan"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // runJobs starts every job in the panel's state that has not run yet. Each
@@ -61,6 +63,20 @@ func (a *Agent) runJobs(ctx context.Context) {
 func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobResult {
 	out := agentproto.JobResult{ID: j.ID, Kind: j.Kind}
 	switch j.Kind {
+	case spec.NetworkDiagnosticKind:
+		var p spec.DiagnosticParams
+		if err := json.Unmarshal(j.Params, &p); err != nil || p.Validate() != nil {
+			out.Error = "invalid diagnostic request"
+			break
+		}
+		now := time.Now().Unix()
+		if p.ExpiresAt <= now || p.ExpiresAt > now+spec.DiagnosticTTLSeconds+30 {
+			out.Error = "diagnostic request expired or clock is out of sync"
+			break
+		}
+		jctx, cancel := context.WithDeadline(ctx, time.Unix(p.ExpiresAt, 0))
+		defer cancel()
+		out.Result, _ = json.Marshal(netdiag.Default.Run(jctx, p.DiagnosticRequest))
 	case "reality_scan":
 		var p struct {
 			Hosts []string `json:"hosts"`

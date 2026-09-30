@@ -214,6 +214,11 @@ func Load(path string) (*Config, error) {
 	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
 	}
+	if c.Probe != nil && c.Probe.Resources != nil {
+		if err := c.Probe.Resources.Validate(); err != nil {
+			return nil, fmt.Errorf("config: probe.resources: %w", err)
+		}
+	}
 	if c.DataDir == "" {
 		c.DataDir = "/var/lib/bosun"
 	}
@@ -306,18 +311,25 @@ func (c *Config) CertFor(serverName string) (certPath, keyPath string, ok bool) 
 
 // ProbeConfig is the standalone probe section.
 type ProbeConfig struct {
-	Enabled     bool            `yaml:"enabled"`
-	CarrierPing *bool           `yaml:"carrier_ping"` // default true
-	Carriers    []spec.Carrier  `yaml:"carriers"`     // empty = the default CT/CU/CM points
-	Tasks       []spec.PingTask `yaml:"tasks"`
+	Resources   *spec.ResourceOptions `yaml:"resources"`
+	Enabled     bool                  `yaml:"enabled"`
+	CarrierPing *bool                 `yaml:"carrier_ping"` // default true
+	Carriers    []spec.Carrier        `yaml:"carriers"`     // empty = the default CT/CU/CM points
+	Tasks       []spec.PingTask       `yaml:"tasks"`
 }
 
 // Spec converts the section into what the probe runner takes.
 func (p *ProbeConfig) Spec() *spec.Probe {
-	if p == nil || !p.Enabled {
+	if p == nil {
 		return nil
 	}
-	out := &spec.Probe{Enabled: true, CarrierPing: p.CarrierPing == nil || *p.CarrierPing, Carriers: p.Carriers}
+	if !p.Enabled {
+		if p.Resources != nil {
+			return &spec.Probe{Resources: p.Resources}
+		}
+		return nil
+	}
+	out := &spec.Probe{Resources: p.Resources, Enabled: true, CarrierPing: p.CarrierPing == nil || *p.CarrierPing, Carriers: p.Carriers}
 	for i, t := range p.Tasks {
 		if t.ID == 0 {
 			t.ID = int64(i + 1)

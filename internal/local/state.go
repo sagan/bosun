@@ -129,10 +129,11 @@ func (g Ingress) ProbePort() int {
 // ProbeSettings is the standalone probe configuration (the UI edits it;
 // config.yaml's probe section only applies to headless drivers).
 type ProbeSettings struct {
-	Enabled     bool            `json:"enabled"`
-	CarrierPing bool            `json:"carrier_ping"`
-	Carriers    []spec.Carrier  `json:"carriers"`
-	Tasks       []spec.PingTask `json:"tasks"`
+	Resources   *spec.ResourceOptions `json:"resources,omitempty"`
+	Enabled     bool                  `json:"enabled"`
+	CarrierPing bool                  `json:"carrier_ping"`
+	Carriers    []spec.Carrier        `json:"carriers"`
+	Tasks       []spec.PingTask       `json:"tasks"`
 }
 
 // Admin is the single local login.

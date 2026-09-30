@@ -9,7 +9,6 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/metrics"
 	"github.com/zeptop-dev/bosun/internal/panel"
-	"github.com/zeptop-dev/bosun/internal/sysinfo"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -44,7 +43,7 @@ func (a *Agent) report(ctx context.Context) bool {
 		}
 		return os.OutboundStats(ctx, true)
 	})
-	host := sysinfo.Snapshot(ctx)
+	host := a.SampleHost(ctx)
 
 	if rep, ok := a.driver.(panel.Reporter); ok {
 		full := a.buildReport(perInboundList, host)

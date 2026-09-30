@@ -126,6 +126,9 @@ func (s *Supervisor) launch(ctx context.Context) error {
 	exited := make(chan struct{})
 	s.mu.Lock()
 	s.cmd = cmd
+	active.Lock()
+	active.commands[cmd] = s.name
+	active.Unlock()
 	s.exited = exited
 	s.gen++
 	s.mu.Unlock()
@@ -138,6 +141,9 @@ func (s *Supervisor) launch(ctx context.Context) error {
 	go s.pipe(stderr, slog.LevelInfo)
 	go func() {
 		err := cmd.Wait()
+		active.Lock()
+		delete(active.commands, cmd)
+		active.Unlock()
 		s.mu.Lock()
 		stopping := s.stopping
 		s.cmd = nil
@@ -236,4 +242,21 @@ func (s *Supervisor) Running() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.cmd != nil
+}
+
+// ActiveProcesses returns only children owned by our supervisors. Monitoring
+// must never discover processes by reading command lines (which carry secrets).
+var active = struct {
+	sync.Mutex
+	commands map[*exec.Cmd]string
+}{commands: make(map[*exec.Cmd]string)}
+
+func ActiveProcesses() map[int32]string {
+	active.Lock()
+	defer active.Unlock()
+	out := make(map[int32]string, len(active.commands))
+	for cmd, name := range active.commands {
+		out[int32(cmd.Process.Pid)] = name
+	}
+	return out
 }

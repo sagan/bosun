@@ -602,13 +602,15 @@ func SplitInboundUser(s string) (name, tag string) {
 
 // SystemStatus is a host resource snapshot.
 type SystemStatus struct {
-	CPUPercent float64 `json:"cpu_percent,omitempty"`
-	MemTotal   uint64  `json:"mem_total,omitempty"`
-	MemUsed    uint64  `json:"mem_used,omitempty"`
-	SwapTotal  uint64  `json:"swap_total,omitempty"`
-	SwapUsed   uint64  `json:"swap_used,omitempty"`
-	DiskTotal  uint64  `json:"disk_total,omitempty"`
-	DiskUsed   uint64  `json:"disk_used,omitempty"`
+	Valid      *MetricValidity `json:"valid,omitempty"`
+	Resources  *Resources      `json:"resources,omitempty"`
+	CPUPercent float64         `json:"cpu_percent,omitempty"`
+	MemTotal   uint64          `json:"mem_total,omitempty"`
+	MemUsed    uint64          `json:"mem_used,omitempty"`
+	SwapTotal  uint64          `json:"swap_total,omitempty"`
+	SwapUsed   uint64          `json:"swap_used,omitempty"`
+	DiskTotal  uint64          `json:"disk_total,omitempty"`
+	DiskUsed   uint64          `json:"disk_used,omitempty"`
 
 	// Probe fields (bosun >= 0.11); zero when the agent is older.
 	Load1        float64      `json:"load1,omitempty"`
@@ -641,21 +643,23 @@ type HostInfo struct {
 
 // PingResult is the latest measurement of one probe target.
 type PingResult struct {
-	TaskID    int64   `json:"task_id"`        // 0 = built-in carrier probe
-	Name      string  `json:"name"`           // "CT", "CU", "CM" or the task name
-	LatencyMs float64 `json:"latency_ms"`     // -1 = lost
-	Loss      float64 `json:"loss,omitempty"` // percent over the recent window (carrier probes)
-	Mbps      float64 `json:"mbps,omitempty"` // download tasks: measured throughput
-	At        int64   `json:"at,omitempty"`   // unix seconds of the sample
+	Quality   *PingQuality `json:"quality,omitempty"`
+	TaskID    int64        `json:"task_id"`        // 0 = built-in carrier probe
+	Name      string       `json:"name"`           // "CT", "CU", "CM" or the task name
+	LatencyMs float64      `json:"latency_ms"`     // -1 = lost
+	Loss      float64      `json:"loss,omitempty"` // percent over the recent window (carrier probes)
+	Mbps      float64      `json:"mbps,omitempty"` // download tasks: measured throughput
+	At        int64        `json:"at,omitempty"`   // unix seconds of the sample
 }
 
 // Probe is the panel's monitoring configuration for a node.
 type Probe struct {
-	Enabled     bool       `json:"enabled"`
-	BeatSeconds int        `json:"beat_seconds,omitempty"` // default 10
-	CarrierPing bool       `json:"carrier_ping,omitempty"` // TCP-connect latency to the carrier probe points
-	Carriers    []Carrier  `json:"carriers,omitempty"`     // empty = DefaultCarriers
-	Tasks       []PingTask `json:"tasks,omitempty"`
+	Resources   *ResourceOptions `json:"resources,omitempty"`
+	Enabled     bool             `json:"enabled"`
+	BeatSeconds int              `json:"beat_seconds,omitempty"` // default 10
+	CarrierPing bool             `json:"carrier_ping,omitempty"` // TCP-connect latency to the carrier probe points
+	Carriers    []Carrier        `json:"carriers,omitempty"`     // empty = DefaultCarriers
+	Tasks       []PingTask       `json:"tasks,omitempty"`
 }
 
 // Komari makes the node report to a Komari monitoring server as a v2
@@ -718,9 +722,12 @@ type PingTask struct {
 	Type            string `json:"type" yaml:"type"`     // icmp | tcp | http | download
 	Target          string `json:"target" yaml:"target"` // host, host:port or URL (download: a large file URL)
 	IntervalSeconds int    `json:"interval_seconds,omitempty" yaml:"interval_seconds"`
-	// SourceIP binds the probe to a local address (tcp, icmp): measure a
+	// SourceIP binds the probe to a local address: measure a
 	// dedicated line from its own NIC instead of the default route.
 	SourceIP string `json:"source_ip,omitempty" yaml:"source_ip"`
+	// TCPReachability accepts refusal as proof of reachability, not service
+	// availability. Captain uses this for automatic dedicated-line checks.
+	TCPReachability bool `json:"tcp_reachability,omitempty" yaml:"tcp_reachability,omitempty"`
 }
 
 // Intervals are the panel-requested polling cadences.

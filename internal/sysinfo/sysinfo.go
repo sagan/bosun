@@ -5,6 +5,7 @@ package sysinfo
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"net"
 	"os"
 	"runtime"
@@ -24,70 +25,96 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
-// Snapshot returns current CPU, memory, swap and root disk usage. Fields that
-// cannot be read are left zero rather than failing the whole snapshot.
-func Snapshot(ctx context.Context) spec.SystemStatus {
-	var s spec.SystemStatus
-	if pct, err := cpu.PercentWithContext(ctx, 0, false); err == nil && len(pct) > 0 {
-		s.CPUPercent = pct[0]
+// Snapshot uses a persistent sampler so repeated calls have a CPU/rate baseline.
+var snapshots Sampler
+
+func Snapshot(ctx context.Context) spec.SystemStatus { return snapshots.Sample(ctx) }
+
+// Sampler owns its baselines: other exporters cannot perturb CPU percentages.
+// Calls are serialized and a one-second cache bounds collection work when the
+// panel, reports and external monitoring all ask for the same host sample.
+type Sampler struct {
+	gpu        gpuSampler
+	epoch      string
+	sequence   uint64
+	mu         sync.Mutex
+	sampleMu   sync.Mutex
+	options    spec.ResourceOptions
+	cached     spec.SystemStatus
+	sampled    time.Time
+	previous   rawResources
+	info       *spec.HostInfo
+	ipCheckAt  time.Time
+	ipv4, ipv6 bool
+	Dial       func(ctx context.Context, network, addr string) error
+}
+
+func (p *Sampler) Configure(options *spec.ResourceOptions) {
+	var next spec.ResourceOptions
+	if options != nil && options.Validate() == nil {
+		next.GPU = options.GPU
+		next.IncludeInterfaces = append([]string(nil), options.IncludeInterfaces...)
+		next.ExcludeInterfaces = append([]string(nil), options.ExcludeInterfaces...)
 	}
+	p.mu.Lock()
+	p.options = next
+	p.gpu.configure(next.GPU)
+	p.mu.Unlock()
+}
+
+func (p *Sampler) Sample(ctx context.Context) spec.SystemStatus {
+	p.sampleMu.Lock()
+	defer p.sampleMu.Unlock()
+	if !p.sampled.IsZero() && time.Since(p.sampled) < time.Second {
+		s := p.cached
+		if s.Resources != nil {
+			r := *s.Resources
+			r.GPU = p.gpu.snapshot()
+			s.Resources = &r
+		}
+		return s
+	}
+	p.mu.Lock()
+	options := p.options
+	p.mu.Unlock()
+	s := spec.SystemStatus{Valid: &spec.MetricValidity{}}
 	if vm, err := mem.VirtualMemoryWithContext(ctx); err == nil {
 		s.MemTotal, s.MemUsed = vm.Total, vm.Used
+		s.Valid.Memory = true
 	}
 	if sw, err := mem.SwapMemoryWithContext(ctx); err == nil {
 		s.SwapTotal, s.SwapUsed = sw.Total, sw.Used
+		s.Valid.Swap = true
 	}
 	if du, err := disk.UsageWithContext(ctx, "/"); err == nil {
 		s.DiskTotal, s.DiskUsed = du.Total, du.Used
+		s.Valid.Disk = true
 	}
-	return s
-}
-
-// Sampler produces the richer probe snapshot: rates need the previous
-// sample, static facts are read once and reachability is re-checked
-// occasionally.
-type Sampler struct {
-	mu        sync.Mutex
-	lastAt    time.Time
-	lastUp    uint64
-	lastDown  uint64
-	info      *spec.HostInfo
-	ipCheckAt time.Time
-	ipv4      bool
-	ipv6      bool
-	// Dial overrides the reachability dialer (tests).
-	Dial func(ctx context.Context, network, addr string) error
-}
-
-// Sample extends Snapshot with load, network rates and totals, connection
-// and process counts, uptime, reachability and static host info.
-func (p *Sampler) Sample(ctx context.Context) spec.SystemStatus {
-	s := Snapshot(ctx)
 	if l, err := load.AvgWithContext(ctx); err == nil {
 		s.Load1, s.Load5, s.Load15 = l.Load1, l.Load5, l.Load15
+		s.Valid.Load = true
 	}
-	if up, down, ok := netTotals(ctx); ok {
-		s.NetTotalUp, s.NetTotalDown = up, down
-		now := time.Now()
-		p.mu.Lock()
-		if !p.lastAt.IsZero() && up >= p.lastUp && down >= p.lastDown {
-			if secs := now.Sub(p.lastAt).Seconds(); secs > 0 {
-				s.NetUp = uint64(float64(up-p.lastUp) / secs)
-				s.NetDown = uint64(float64(down-p.lastDown) / secs)
-			}
-		}
-		p.lastAt, p.lastUp, p.lastDown = now, up, down
-		p.mu.Unlock()
-	}
-	s.TCP, s.UDP = connCounts(ctx)
+	s.TCP, s.UDP, s.Valid.Connections = connCounts(ctx)
 	if pids, err := process.PidsWithContext(ctx); err == nil {
 		s.Processes = len(pids)
+		s.Valid.Processes = true
 	}
 	if u, err := host.UptimeWithContext(ctx); err == nil {
 		s.Uptime = u
+		s.Valid.Uptime = true
 	}
 	s.Info = p.hostInfo(ctx)
+	raw := collectResources(ctx, s.Info.BootTime)
+	s.Resources, s.CPUPercent, s.NetUp, s.NetDown, s.NetTotalUp, s.NetTotalDown, s.Valid.CPU, s.Valid.Network = reduceResources(raw, p.previous, options)
+	if p.epoch == "" {
+		p.epoch = rand.Text()
+	}
+	p.sequence++
+	s.Resources.Epoch, s.Resources.Sequence = p.epoch, p.sequence
+	s.Resources.GPU = p.gpu.snapshot()
+	p.previous = raw
 	s.IPv4, s.IPv6 = p.reachability(ctx)
+	p.cached, p.sampled = s, time.Now()
 	return s
 }
 
@@ -113,7 +140,9 @@ func (p *Sampler) hostInfo(ctx context.Context) *spec.HostInfo {
 	if n, err := cpu.CountsWithContext(ctx, true); err == nil {
 		info.CPUCores = n
 	}
-	p.info = info
+	if info.BootTime > 0 && info.CPUCores > 0 {
+		p.info = info
+	}
 	return info
 }
 
@@ -145,43 +174,30 @@ func (p *Sampler) reachability(ctx context.Context) (bool, bool) {
 	return v4, v6
 }
 
-// netTotals sums bytes over every non-loopback, non-virtual interface.
-func netTotals(ctx context.Context) (up, down uint64, ok bool) {
-	ios, err := gnet.IOCountersWithContext(ctx, true)
-	if err != nil {
-		return 0, 0, false
-	}
-	for _, io := range ios {
-		n := io.Name
-		if n == "lo" || strings.HasPrefix(n, "docker") || strings.HasPrefix(n, "br-") || strings.HasPrefix(n, "veth") || strings.HasPrefix(n, "virbr") {
-			continue
-		}
-		up += io.BytesSent
-		down += io.BytesRecv
-	}
-	return up, down, true
-}
-
 // connCounts reads /proc/net/sockstat{,6} on Linux (cheap) and falls back
 // to gopsutil elsewhere.
-func connCounts(ctx context.Context) (tcp, udp int) {
+func connCounts(ctx context.Context) (tcp, udp int, valid bool) {
 	if runtime.GOOS == "linux" {
 		for _, f := range []string{"/proc/net/sockstat", "/proc/net/sockstat6"} {
 			t, u, ok := parseSockstat(f)
 			if ok {
+				valid = true
 				tcp += t
 				udp += u
 			}
 		}
-		return tcp, udp
+		return tcp, udp, valid
 	}
+	tcpOK, udpOK := false, false
 	if cs, err := gnet.ConnectionsWithContext(ctx, "tcp"); err == nil {
+		tcpOK = true
 		tcp = len(cs)
 	}
 	if cs, err := gnet.ConnectionsWithContext(ctx, "udp"); err == nil {
+		udpOK = true
 		udp = len(cs)
 	}
-	return tcp, udp
+	return tcp, udp, tcpOK && udpOK
 }
 
 func parseSockstat(path string) (tcp, udp int, ok bool) {

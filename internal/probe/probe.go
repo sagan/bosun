@@ -6,6 +6,7 @@ package probe
 
 import (
 	"context"
+	"crypto/rand"
 	"net"
 	"net/http"
 	"sort"
@@ -29,10 +30,9 @@ func carriersOf(cfg spec.Probe) []spec.Carrier {
 }
 
 const (
-	carrierInterval = 10 * time.Second
-	ringSize        = 30 // 5 minutes of carrier samples
-	dialTimeout     = 3 * time.Second
-	downloadWindow  = 8 * time.Second // like the speed-test tools: ~8s of transfer
+	ringSize       = 30 // 5 minutes of carrier samples
+	dialTimeout    = 3 * time.Second
+	downloadWindow = 8 * time.Second // like the speed-test tools: ~8s of transfer
 )
 
 // Runner owns the probe goroutines.
@@ -44,51 +44,13 @@ type Runner struct {
 	// Download overrides the throughput test (tests).
 	Download func(ctx context.Context, url string) (ttfbMs, mbps float64)
 
-	mu      sync.Mutex
-	cfg     spec.Probe
-	cancel  context.CancelFunc
-	carrier map[string]*ring
-	tasks   map[int64]spec.PingResult
-}
-
-type ring struct {
-	samples []float64 // latency ms, -1 = lost
-	next    int
-	full    bool
-}
-
-func (r *ring) add(v float64) {
-	if len(r.samples) < ringSize {
-		r.samples = append(r.samples, v)
-		return
-	}
-	r.samples[r.next] = v
-	r.next = (r.next + 1) % ringSize
-	r.full = true
-}
-
-func (r *ring) loss() float64 {
-	if len(r.samples) < 3 {
-		return 0
-	}
-	lost := 0
-	for _, v := range r.samples {
-		if v < 0 {
-			lost++
-		}
-	}
-	return float64(lost) * 100 / float64(len(r.samples))
-}
-
-func (r *ring) last() float64 {
-	if len(r.samples) == 0 {
-		return -1
-	}
-	i := r.next - 1
-	if i < 0 {
-		i = len(r.samples) - 1
-	}
-	return r.samples[i]
+	// HTTPTransport is optional for local tests (e.g. a trusted test TLS CA).
+	HTTPTransport *http.Transport
+	epoch         string
+	records       map[probeKey]*probeRecord
+	mu            sync.Mutex
+	cfg           spec.Probe
+	cancel        context.CancelFunc
 }
 
 // Configure applies a new probe config, restarting goroutines when it
@@ -99,6 +61,8 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 	var next spec.Probe
 	if cfg != nil {
 		next = *cfg
+		next.Tasks = append([]spec.PingTask(nil), cfg.Tasks...)
+		next.Carriers = append([]spec.Carrier(nil), cfg.Carriers...)
 	}
 	if sameConfig(r.cfg, next) && (r.cancel != nil || !next.Enabled) {
 		return
@@ -108,10 +72,8 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 		r.cancel = nil
 	}
 	r.cfg = next
-	r.tasks = map[int64]spec.PingResult{}
-	if r.carrier == nil {
-		r.carrier = map[string]*ring{}
-	}
+	r.epoch = rand.Text()
+	r.records = map[probeKey]*probeRecord{}
 	if !next.Enabled {
 		return
 	}
@@ -119,14 +81,14 @@ func (r *Runner) Configure(parent context.Context, cfg *spec.Probe) {
 	r.cancel = cancel
 	if next.CarrierPing {
 		for _, c := range carriersOf(next) {
-			if r.carrier[c.Name] == nil {
-				r.carrier[c.Name] = &ring{}
-			}
-			go r.carrierLoop(ctx, c.Name, c.Addr)
+			go r.qualityLoop(ctx, spec.PingTask{Name: c.Name, Type: "tcp", Target: c.Addr, IntervalSeconds: 10}, true, r.epoch)
 		}
 	}
 	for _, t := range next.Tasks {
-		go r.taskLoop(ctx, t)
+		// Older Captains identify automatic line checks by negative ingress ID.
+		// Keep their reachability policy until both peers support the new flag.
+		reachability := t.TCPReachability || (t.ID < 0 && t.SourceIP != "" && strings.EqualFold(t.Type, "tcp"))
+		go r.qualityLoop(ctx, t, reachability, r.epoch)
 	}
 }
 
@@ -156,45 +118,59 @@ func (r *Runner) Stop() {
 		r.cancel = nil
 	}
 	r.cfg = spec.Probe{}
+	r.records = nil
+	r.epoch = ""
 }
 
-func (r *Runner) carrierLoop(ctx context.Context, name, addr string) {
-	t := time.NewTicker(carrierInterval)
-	defer t.Stop()
-	for {
-		ms := r.tcpMs(ctx, addr)
-		r.mu.Lock()
-		if rg := r.carrier[name]; rg != nil {
-			rg.add(ms)
-		}
-		r.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
+type probeKey struct {
+	id   int64
+	name string
+}
+type probeRecord struct {
+	result       spec.PingResult
+	samples      []spec.ProbeMeasurement
+	acknowledged uint64
 }
 
-func (r *Runner) taskLoop(ctx context.Context, t spec.PingTask) {
+func (r *Runner) qualityLoop(ctx context.Context, t spec.PingTask, reachability bool, epoch string) {
 	iv := time.Duration(t.IntervalSeconds) * time.Second
 	if iv < 5*time.Second {
 		iv = 30 * time.Second
 	}
-	if strings.EqualFold(t.Type, "download") && iv < 10*time.Minute {
-		iv = 10 * time.Minute // throughput tests cost real traffic
+	if t.Type == "download" && iv < 10*time.Minute {
+		iv = 10 * time.Minute
 	}
 	tk := time.NewTicker(iv)
 	defer tk.Stop()
+	var sequence uint64
 	for {
-		res := spec.PingResult{TaskID: t.ID, Name: t.Name, At: time.Now().Unix()}
-		if strings.EqualFold(t.Type, "download") {
-			res.LatencyMs, res.Mbps = r.download(ctx, t.Target)
-		} else {
-			res.LatencyMs = r.measure(ctx, t)
+		if ctx.Err() != nil {
+			return
 		}
+		m := r.scheduled(ctx, t, reachability)
+		sequence++
+		m.Sequence = sequence
 		r.mu.Lock()
-		r.tasks[t.ID] = res
+		if ctx.Err() != nil || r.epoch != epoch {
+			r.mu.Unlock()
+			return
+		}
+		key := probeKey{t.ID, t.Name}
+		rec := r.records[key]
+		if rec == nil {
+			rec = &probeRecord{}
+			r.records[key] = rec
+		}
+		rec.samples = append(rec.samples, m)
+		if len(rec.samples) > 60 {
+			rec.samples = append([]spec.ProbeMeasurement(nil), rec.samples[len(rec.samples)-60:]...)
+		}
+		kind := strings.ToLower(t.Type)
+		if reachability {
+			kind = "tcp_reachability"
+		}
+		w := windowStats(rec.samples)
+		rec.result = spec.PingResult{TaskID: t.ID, Name: t.Name, At: m.At, LatencyMs: m.LatencyMs, Mbps: m.Mbps, Loss: float64(w.Failed) * 100 / float64(w.Attempts), Quality: &spec.PingQuality{ProbeMeasurement: m, Epoch: epoch, Type: kind, IntervalSeconds: int(iv / time.Second), Window: w}}
 		r.mu.Unlock()
 		select {
 		case <-ctx.Done():
@@ -329,65 +305,65 @@ func icmpMs(ctx context.Context, target, src string) float64 {
 	return float64(st.AvgRtt.Microseconds()) / 1000
 }
 
-// Results returns the latest carrier and task measurements.
-func (r *Runner) Results() []spec.PingResult {
+// Results exposes only the latest measurement and its rolling window.
+func (r *Runner) Results() []spec.PingResult { return r.results(false) }
+
+// Batch includes outstanding attempts. Other readers cannot consume the queue.
+func (r *Runner) Batch() []spec.PingResult { return r.results(true) }
+func (r *Runner) results(batch bool) []spec.PingResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var out []spec.PingResult
-	if r.cfg.CarrierPing {
-		for _, c := range carriersOf(r.cfg) {
-			if rg := r.carrier[c.Name]; rg != nil && len(rg.samples) > 0 {
-				out = append(out, spec.PingResult{Name: c.Name, LatencyMs: rg.last(), Loss: rg.loss(), At: time.Now().Unix()})
-			}
+	out := []spec.PingResult{}
+	keys := []probeKey{}
+	for k := range r.records {
+		if k.id != 0 {
+			keys = append(keys, k)
 		}
 	}
-	ids := make([]int64, 0, len(r.tasks))
-	for id := range r.tasks {
-		ids = append(ids, id)
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].id != keys[j].id {
+			return keys[i].id < keys[j].id
+		}
+		return keys[i].name < keys[j].name
+	})
+	if r.cfg.CarrierPing {
+		carriers := []probeKey{}
+		for _, c := range carriersOf(r.cfg) {
+			carriers = append(carriers, probeKey{0, c.Name})
+		}
+		keys = append(carriers, keys...)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	for _, id := range ids {
-		out = append(out, r.tasks[id])
+	for _, key := range keys {
+		rec := r.records[key]
+		if rec == nil {
+			continue
+		}
+		p := rec.result
+		q := *p.Quality
+		p.Quality = &q
+		if batch {
+			for _, m := range rec.samples {
+				if m.Sequence > rec.acknowledged {
+					q.Recent = append(q.Recent, m)
+				}
+			}
+		}
+		out = append(out, p)
 	}
 	return out
 }
 
-// download fetches url for up to downloadWindow and reports time to first
-// byte and the average throughput in Mbps; -1/0 when it failed.
-func (r *Runner) download(ctx context.Context, url string) (ttfbMs, mbps float64) {
-	if r.Download != nil {
-		return r.Download(ctx, url)
-	}
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		url = "https://" + url
-	}
-	dctx, cancel := context.WithTimeout(ctx, downloadWindow+5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(dctx, http.MethodGet, url, nil)
-	if err != nil {
-		return -1, 0
-	}
-	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
-	start := time.Now()
-	resp, err := client.Do(req)
-	if err != nil {
-		return -1, 0
-	}
-	defer resp.Body.Close()
-	ttfb := time.Since(start)
-	buf := make([]byte, 64<<10)
-	var n int64
-	deadline := time.Now().Add(downloadWindow)
-	for time.Now().Before(deadline) {
-		k, err := resp.Body.Read(buf)
-		n += int64(k)
-		if err != nil {
-			break
+// Acknowledge only the batch that Captain accepted, including when a newer
+// local measurement arrived while the network request was in flight.
+func (r *Runner) Acknowledge(batch []spec.PingResult) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, p := range batch {
+		if p.Quality == nil || p.Quality.Epoch != r.epoch {
+			continue
+		}
+		if rec := r.records[probeKey{p.TaskID, p.Name}]; rec != nil {
+			rec.acknowledged = max(rec.acknowledged, p.Quality.Sequence)
 		}
 	}
-	elapsed := time.Since(start) - ttfb
-	if elapsed <= 0 || n == 0 {
-		return float64(ttfb.Microseconds()) / 1000, 0
-	}
-	return float64(ttfb.Microseconds()) / 1000, float64(n) * 8 / elapsed.Seconds() / 1e6
 }

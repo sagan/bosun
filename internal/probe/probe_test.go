@@ -9,26 +9,6 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
-func TestRingLoss(t *testing.T) {
-	r := &ring{}
-	for i := 0; i < ringSize+5; i++ {
-		v := float64(i)
-		if i%10 == 0 {
-			v = -1
-		}
-		r.add(v)
-	}
-	if len(r.samples) != ringSize || !r.full {
-		t.Fatalf("ring size %d", len(r.samples))
-	}
-	if r.last() != float64(ringSize+4) {
-		t.Fatalf("last %v", r.last())
-	}
-	if l := r.loss(); l < 5 || l > 15 {
-		t.Fatalf("loss %v", l)
-	}
-}
-
 func TestMeasureRetriesAndLoss(t *testing.T) {
 	calls := 0
 	r := &Runner{Dial: func(_ context.Context, addr string) (time.Duration, error) {

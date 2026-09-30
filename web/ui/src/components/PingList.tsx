@@ -21,7 +21,7 @@ export function PingList({ pings }: { pings: Ping[] }) {
         <Group key={g.key} gap="xs" mb={6} wrap="wrap">
           <Text size="xs" c="dimmed" w={72}>{t(`probe.group.${g.key}`)}</Text>
           {g.items.map((p) => (
-            <Tooltip key={`${p.task_id}-${p.name}`} label={[p.loss !== undefined ? t('probe.loss', { pct: p.loss.toFixed(0) }) : '', p.at ? new Date(p.at * 1000).toLocaleTimeString() : ''].filter(Boolean).join(' · ') || p.name}>
+            <Tooltip key={`${p.task_id}-${p.name}`} label={[p.quality ? t(`networkQuality.outcomes.${p.quality.outcome}`) : '', p.loss !== undefined ? t('probe.loss', { pct: p.loss.toFixed(0) }) : '', p.at ? new Date(p.at * 1000).toLocaleTimeString() : ''].filter(Boolean).join(' · ') || p.name}>
               <Badge variant="light" color={colour(p)} size="md" style={{ textTransform: 'none' }}>{p.name} {p.mbps ? `${p.mbps.toFixed(1)} Mbps` : ms(p.latency_ms)}</Badge>
             </Tooltip>
           ))}

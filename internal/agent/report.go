@@ -211,13 +211,12 @@ func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traff
 func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) agentproto.Report {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: map[string]agentproto.CoreStatus{}, Online: map[string][]string{}}
+	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
 	a.statusMu.Lock()
 	rep.Doctor = a.pendingDoctor
 	a.statusMu.Unlock()
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
-		rep.Cores[name] = agentproto.CoreStatus{Running: c.Running()}
 		if tr, ok := c.(core.OnlineTracker); ok && c.Running() {
 			online, err := tr.Online(ctx)
 			if err != nil {

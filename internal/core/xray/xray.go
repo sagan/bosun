@@ -88,13 +88,7 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 func (c *Core) Name() string { return "xray" }
 
 func (c *Core) Capabilities() core.Capabilities {
-	return core.Capabilities{
-		Protocols:     []spec.Protocol{spec.VLESS, spec.VMess, spec.Trojan, spec.Shadowsocks, spec.SOCKS, spec.HTTP, spec.WireGuard},
-		Transports:    []string{"ws", "grpc", "httpupgrade", "xhttp"},
-		HotUserReload: true,
-		Fallbacks:     true,
-		ProxyProtocol: true,
-	}
+	return spec.CapabilitiesForCore("xray")
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {

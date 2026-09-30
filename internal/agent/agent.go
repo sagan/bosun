@@ -60,8 +60,9 @@ type Agent struct {
 	// userIDs maps spec.User.Name (the stats key) to the panel user ID.
 	userIDs map[string]int64
 
-	statusMu sync.Mutex
-	status   Status
+	statusMu     sync.Mutex
+	appliedCores map[string][]string // guarded by statusMu; successful last apply only
+	status       Status
 
 	// Upgrade is called (in its own goroutine, once per requested version)
 	// when the panel asks the node to move to another release.
@@ -71,6 +72,8 @@ type Agent struct {
 	// it returns the version now installed and the agent restarts after
 	// the result has been reported.
 	Rollback func() (string, error)
+	// Remove starts an external worker; only that worker reports completion.
+	Remove func(context.Context, agentproto.Job) error
 
 	// Certs obtains certificates for inbounds with auto_cert; nil disables.
 	Certs *certs.Manager

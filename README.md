@@ -28,6 +28,52 @@ Verified end to end against the manifest's tested releases (sing-box
 - Failed applies are retried on the next pull and unacknowledged traffic deltas are kept across failed reports, so a panel outage loses no accounting.
 
 Core selection: `cores.order` in the config is the preference; an inbound goes to the first core that supports its protocol, transport and cipher. XHTTP only runs on Xray, HTTP/2 transport and Shadowsocks 2022 multi-user only on sing-box, mieru only on mita. Hysteria2 runs on sing-box (default) or the official server when `hysteria` is listed first.
+The standalone panel and Captain filter the selector by the same adapter
+capabilities. Compatible cores not enabled in `config.yaml` are greyed out;
+an enabled but idle core remains available. Automatic mode previews the
+configured priority (REALITY prefers Xray), while an incompatible manual pin
+requires an explicit new choice. Selection does not install or enable a core.
+Reports advertise capabilities and priority separately from process liveness,
+and only confirm inbound assignments after a successful apply on a running
+core. Captain keeps availability unknown for older or offline nodes.
+
+
+## Uninstalling or leaving Captain
+
+The installer already provides an uninstall command (there is no public binary
+`bosun uninstall` subcommand):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/zeptop-dev/bosun/master/scripts/install.sh | sh -s -- uninstall
+```
+
+Append `--keep-data` to retain `/var/lib/bosun` (local state, cores and
+certificates); the service, executable and `/etc/bosun` are still removed.
+
+Starting with v0.55.0, Captain's node deletion dialog can also request a switch
+to standalone mode or an uninstall. This requires a new Captain with the removal
+API and a standard root Linux installation: systemd/OpenRC, executable
+`/usr/local/bin/bosun`, config `/etc/bosun/config.yaml`, data `/var/lib/bosun`,
+and the default token/local-state paths. Containers and custom installations
+must be handled on the host. Only bosun-owned network rules are cleaned up by
+the remote uninstall; OS packages, SSH and host network configuration remain.
+
+Standalone conversion preserves the currently provisioned credentials, inbound
+access/limits, routing, certificates and forwards. Captain's subscription URLs,
+plans, billing, history and expiry schedules are not transferred; set ongoing
+quotas and expiry locally. Editing an imported user locally replaces its imported
+per-inbound limits with the local user's settings. An existing local administrator
+keeps its login; a headless installation gets a panel at `127.0.0.1:2053`. Set a
+password over SSH with `bosun admin set -user admin -password 'NEW_PASSWORD'`
+then restart bosun and use a tunnel or reverse proxy to reach it. The managed files are restored
+and the original service is restarted if conversion/startup fails.
+
+An independent worker survives the stop of bosun and reports completion before
+Captain deletes its record. It stages credentials and, if delivery fails, the
+result in `/var/tmp/bosun-removal-JOB_ID/` with root-only permissions. See
+[Captain node removal](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#removing-a-node)
+for retry and recovery. Selecting record-only deletion does not convert or stop
+bosun; its cached configuration can keep serving traffic.
 
 ## Layout
 

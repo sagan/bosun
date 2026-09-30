@@ -151,6 +151,15 @@ func (i Inbound) Validate() error {
 			return fmt.Errorf("fallback dest is required")
 		}
 	}
+	// Refuse an incompatible explicit pin before persisting or applying it.
+	// Unknown names remain forward-compatible with future adapters.
+	if i.Core != "" {
+		caps := CapabilitiesForCore(i.Core)
+		if len(caps.Protocols) > 0 && !caps.Supports(i) {
+			return fmt.Errorf("core %q does not support this inbound (%s)", i.Core, caps.UnsupportedReason(i))
+		}
+	}
+
 	return nil
 }
 

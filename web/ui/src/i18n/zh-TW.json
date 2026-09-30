@@ -249,7 +249,32 @@
     "wgAddressHint": "使用者位址從這個網段按編號分配",
     "traffic": "流量",
     "noSniff": "關閉目標嗅探",
-    "noSniffHint": "預設開啟：從 TLS/HTTP 標頭裡識別真實網域，網域分流才能生效。只有嗅探導致某些客戶端異常時才關。"
+    "noSniffHint": "預設開啟：從 TLS/HTTP 標頭裡識別真實網域，網域分流才能生效。只有嗅探導致某些客戶端異常時才關。",
+    "coreSelection": {
+      "auto": "自動選擇（建議）",
+      "preview": "預計使用 {{core}}。自動選擇遵循節點優先順序；REALITY 優先 Xray。",
+      "enabledHint": "僅列出相容核心；未啟用的核心需先在節點設定中啟用。",
+      "unknown": "核心可用性未知（節點版本較舊、離線或尚未回報），將在節點套用時驗證。",
+      "notEnabled": "未啟用",
+      "unavailable": "節點未啟用此核心，請先啟用或選擇其他核心。",
+      "noAvailable": "節點尚未啟用支援目前設定的核心，請先在節點中啟用相容核心。",
+      "loading": "正在檢查相容核心…",
+      "loadFailed": "無法檢查核心，正在自動重試，請檢查連線。",
+      "invalidJSON": "請先修正設定 JSON，再檢查相容核心。",
+      "running": "執行核心：{{core}}",
+      "notReported": "尚未確認執行核心",
+      "reasons": {
+        "protocol": "目前核心不支援此協定，請重新選擇。",
+        "transport": "目前核心不支援此傳輸方式，請重新選擇。",
+        "ss2022": "多使用者 Shadowsocks 2022 需要 sing-box。",
+        "shadowTLS": "ShadowTLS 需要 sing-box。",
+        "fallbacks": "回落設定需要 Xray。",
+        "proxyProtocol": "PROXY protocol 需要 Xray。",
+        "snellMultiUser": "Snell 多使用者模式需要 sing-box。",
+        "snellTLS": "Snell TLS 混淆需要 snell-server。",
+        "unknown": "無法識別此核心，請選擇相容核心。"
+      }
+    }
   },
   "ingress": {
     "title": "專線入口",

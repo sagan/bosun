@@ -4,6 +4,7 @@ import { IconRefresh } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Fallback, type FallbackLimit, type Inbound, type Ingress, type IngressInput, type Settings } from '../lib/api'
+import { useCoreSelection } from '../lib/coreSelection'
 import { useQuery } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { RealityScan, type RealityResult } from './RealityScan'
@@ -11,7 +12,6 @@ import { toast } from '../lib/notify'
 import { IngressFields, clientHost, emptyIngress, ingressPayload, type IngressValues } from './IngressFields'
 
 const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru', 'snell', 'socks', 'http', 'naive', 'wireguard']
-const cores = ['', 'singbox', 'xray', 'mita', 'hysteria', 'snell']
 const transports = ['tcp', 'ws', 'grpc', 'httpupgrade', 'http', 'xhttp']
 const ciphers = ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305', 'aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'none']
 
@@ -161,6 +161,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   // A node reachable only through a line (no public address set) defaults new inbounds to its first ingress.
   const ingressForm = useForm<IngressValues>({ initialValues: emptyIngress, validate: { Name: (v) => (v.trim() ? null : t('form.required')) } })
   const v = form.values
+  let coreInbound: Record<string, unknown> | undefined
+  try { coreInbound = toInbound(v) } catch { /* JSON validation explains the error */ }
+  const coreSelection = useCoreSelection('/api/inbounds/core-options', coreInbound, v.core)
   const selectedIngress = ingresses.find((g) => g.id === v.ingress_id)
   const firstFree = (g?: { port_from: number; port_to: number; reserved_ports?: number[] }) => { if (!g || !g.port_from) return 0; for (let p = g.port_from; p <= g.port_to; p++) if (!usedPorts.includes(p) && !(g.reserved_ports ?? []).includes(p)) return p; return 0 }
   useEffect(() => { if (lineOnly && !initial.ingress_id && !initial.tag && ingresses[0]) form.setValues({ ingress_id: ingresses[0].id, port: firstFree(ingresses[0]) || form.values.port }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -194,7 +197,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   const apply = (r: (typeof recipes)[number]) => {
     // A recipe keeps the chosen line ingress and takes a port from its range; any protocol may ride a line.
     const port = selectedIngress && selectedIngress.port_from ? (firstFree(selectedIngress) || r.values.port) : r.values.port
-    form.setValues({ ...empty, ...r.values, port, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true, ingress_id: v.ingress_id })
+    form.setValues({ ...empty, ...r.values, core: v.core, port, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true, ingress_id: v.ingress_id })
     if (r.values.tls === 'reality') void genReality()
     if (r.values.cipher?.startsWith('2022')) void genKey()
     if (r.values.obfs) void genPassword()
@@ -202,6 +205,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
     if (r.values.protocol === 'wireguard') void genWG()
   }
   const submit = (vals: Values) => {
+    if (coreSelection.blocked) return
     if (newIngress) {
       if (ingressForm.validate().hasErrors) return
       onSubmit({ body: toInbound(vals), ingress: ingressPayload(ingressForm.values) })
@@ -244,12 +248,12 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
             <IngressFields form={ingressForm} />
           </Stack>
         )}
-        <Group grow>
+        <Group grow align="flex-start">
           <TextInput label={t('inbounds.listen')} placeholder={selectedIngress?.bind_ip || '::'} {...form.getInputProps('listen')} />
           <NumberInput label={t('inbounds.port')} min={1} max={65535} required {...form.getInputProps('port')} />
-          <Select label={t('inbounds.core')} data={cores.map((c) => ({ value: c, label: c || t('inbounds.coreAuto') }))} allowDeselect={false} {...form.getInputProps('core')} />
           <Switch mt={24} label={t('inbounds.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
         </Group>
+        <Select label={t('inbounds.core')} allowDeselect={false} {...form.getInputProps('core')} {...coreSelection.selectProps} />
 
         {(tlsCapable || quic) && (
           <Card p="sm">
@@ -405,7 +409,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           <JsonInput label={t('inbounds.extra')} description={t('inbounds.extraHint')} autosize minRows={3} formatOnBlur {...form.getInputProps('extra')} />
         </Collapse>
 
-        <Group justify="flex-end"><Button variant="default" onClick={onCancel}>{t('common.cancel')}</Button><Button type="submit" loading={busy}>{t('common.save')}</Button></Group>
+        <Group justify="flex-end"><Button variant="default" onClick={onCancel}>{t('common.cancel')}</Button><Button type="submit" loading={busy} disabled={coreSelection.blocked}>{t('common.save')}</Button></Group>
       </Stack>
     </form>
   )

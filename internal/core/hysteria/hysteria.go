@@ -99,7 +99,7 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 func (c *Core) Name() string { return "hysteria" }
 
 func (c *Core) Capabilities() core.Capabilities {
-	return core.Capabilities{Protocols: []spec.Protocol{spec.Hysteria2}, HotUserReload: true}
+	return spec.CapabilitiesForCore("hysteria")
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {

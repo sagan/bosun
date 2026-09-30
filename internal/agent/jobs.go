@@ -74,6 +74,16 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 	case "warp_register":
 		r := a.warpRegisterJob(ctx, j.Params)
 		out.Result, out.Error = r.Result, r.Error
+	case "node_remove":
+		if a.Remove == nil {
+			out.Error = "remote removal is unavailable on this installation"
+			break
+		}
+		if err := a.Remove(ctx, j); err != nil {
+			out.Error = err.Error()
+			break
+		}
+		out.Result = json.RawMessage(`{"phase":"starting"}`)
 	case "rollback":
 		if a.Rollback == nil {
 			out.Error = "self-update is disabled on this node"

@@ -464,3 +464,22 @@ func TestUploadOnlyWhenIngressCannotBeMirrored(t *testing.T) {
 		t.Fatalf("the warning should be gone once ingress works: %q", got)
 	}
 }
+
+// A fresh worker has no in-memory ownership history: inspect the live
+// filters and keep foreign filters, even when they share our priority.
+func TestClearPreservesForeignIngress(t *testing.T) {
+	k := newTC()
+	k.ingress["eth0"] = map[uint32]string{1: ifbDev, 2: "ifb-other"}
+	if err := k.shaper().Apply(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := k.ingress["eth0"][1]; ok {
+		t.Fatal("bosun redirect survived")
+	}
+	if k.ingress["eth0"][2] != "ifb-other" {
+		t.Fatal("foreign ingress filter removed")
+	}
+	if strings.Contains(k.all(), "qdisc del dev eth0 ingress") {
+		t.Fatal("shared ingress qdisc removed")
+	}
+}

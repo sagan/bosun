@@ -249,7 +249,32 @@
     "wgAddressHint": "クライアントアドレスはこのネットワークからユーザー ID で割り当て",
     "traffic": "トラフィック",
     "noSniff": "宛先スニッフィングを無効化",
-    "noSniffHint": "既定で有効：TLS/HTTP から本当のホストを読み取り、ドメインルールを効かせます。クライアントに支障がある時だけ無効に。"
+    "noSniffHint": "既定で有効：TLS/HTTP から本当のホストを読み取り、ドメインルールを効かせます。クライアントに支障がある時だけ無効に。",
+    "coreSelection": {
+      "auto": "自動選択（推奨）",
+      "preview": "使用予定：{{core}}。ノードの優先順位に従います。REALITY は Xray を優先します。",
+      "enabledHint": "対応するコアのみ表示します。未有効のコアはノードの設定で有効にしてください。",
+      "unknown": "コアの利用可否は不明です（旧版、オフライン、未報告）。ノードで適用時に検証します。",
+      "notEnabled": "未有効",
+      "unavailable": "このコアはノードで有効になっていません。有効にするか、別のコアを選択してください。",
+      "noAvailable": "現在の設定に対応するコアが有効になっていません。ノードで対応するコアを有効にしてください。",
+      "loading": "対応するコアを確認中…",
+      "loadFailed": "コアを確認できません。自動で再試行しています。接続を確認してください。",
+      "invalidJSON": "設定 JSON を修正してから対応するコアを確認してください。",
+      "running": "稼働コア：{{core}}",
+      "notReported": "稼働コアは未確認",
+      "reasons": {
+        "protocol": "このコアはプロトコルに対応していません。選び直してください。",
+        "transport": "このコアはトランスポートに対応していません。選び直してください。",
+        "ss2022": "複数ユーザーの Shadowsocks 2022 には sing-box が必要です。",
+        "shadowTLS": "ShadowTLS には sing-box が必要です。",
+        "fallbacks": "フォールバックには Xray が必要です。",
+        "proxyProtocol": "PROXY protocol には Xray が必要です。",
+        "snellMultiUser": "Snell の複数ユーザーモードには sing-box が必要です。",
+        "snellTLS": "Snell の TLS 難読化には snell-server が必要です。",
+        "unknown": "不明なコアです。対応するコアを選択してください。"
+      }
+    }
   },
   "ingress": {
     "title": "専用線入口",

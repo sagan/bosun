@@ -427,3 +427,11 @@ func truncate(b []byte) string {
 }
 
 var _ = errors.New
+
+// RemovalConnection is copied only into a root-only local worker plan. It
+// must never be logged or returned by the local UI.
+func (c *Client) RemovalConnection() (string, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg.URL, c.token
+}

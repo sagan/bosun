@@ -212,6 +212,11 @@ type ForwardTargetStatus struct {
 type CoreStatus struct {
 	Running bool   `json:"running"`
 	Version string `json:"version,omitempty"`
+	// Capabilities marks the complete enabled-core inventory (priority order).
+	// Missing on old nodes; Running=false alone never means unavailable.
+	Capabilities *spec.CoreCapabilities `json:"capabilities,omitempty"`
+	Priority     int                    `json:"priority,omitempty"`
+	Inbounds     []string               `json:"inbounds,omitempty"` // successfully applied tags, only while running
 }
 
 // ReportResponse lets Captain nudge the agent to fetch state immediately

@@ -161,6 +161,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/logs", auth(s.logs))
 	m.HandleFunc("GET /api/cores", auth(s.cores))
 
+	m.HandleFunc("GET /api/inbounds/core-options", auth(s.coreOptions))
 	m.HandleFunc("GET /api/inbounds", auth(s.listInbounds))
 	m.HandleFunc("POST /api/inbounds", auth(s.local(s.createInbound)))
 	m.HandleFunc("PUT /api/inbounds/{tag}", auth(s.local(s.updateInbound)))
@@ -546,7 +547,11 @@ func (s *Server) listInbounds(w http.ResponseWriter, r *http.Request) {
 	st := s.currentAgent()
 	assign := map[string]string{}
 	if st != nil {
-		assign = st.Status().Assign
+		for name, core := range st.CoreStatus() {
+			for _, tag := range core.Inbounds {
+				assign[tag] = name
+			}
+		}
 	}
 	type row struct {
 		local.Inbound
@@ -565,6 +570,10 @@ func (s *Server) createInbound(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
+	if err := s.checkInboundCore(ib); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.d.Store.PutInbound(ib, ""); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -575,6 +584,10 @@ func (s *Server) createInbound(w http.ResponseWriter, r *http.Request) {
 func (s *Server) updateInbound(w http.ResponseWriter, r *http.Request) {
 	var ib local.Inbound
 	if err := decode(r, &ib); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.checkInboundCore(ib); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}

@@ -284,7 +284,19 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	// is still reported dirty (and retried) but the healthy cores serve.
 	var errs []error
 	for _, name := range a.reg.Names() {
-		if err := a.applyCore(ctx, name, node, assign[name], restart); err != nil {
+		err := a.applyCore(ctx, name, node, assign[name], restart)
+		a.statusMu.Lock()
+		if a.appliedCores == nil {
+			a.appliedCores = map[string][]string{}
+		}
+		delete(a.appliedCores, name)
+		if err == nil {
+			for _, ib := range assign[name] {
+				a.appliedCores[name] = append(a.appliedCores[name], ib.Tag)
+			}
+		}
+		a.statusMu.Unlock()
+		if err != nil {
 			a.log.Error("core apply failed", "core", name, "err", err)
 			errs = append(errs, err)
 		}

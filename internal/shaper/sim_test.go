@@ -2,8 +2,10 @@ package shaper
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -13,6 +15,7 @@ import (
 // be replaced in place, a class that loses its leaf qdisc the moment it
 // gains a child — instead of a fixed string that always agrees.
 type tcSim struct {
+	ingress map[string]map[uint32]string // dev -> filter handle -> redirect target
 	cmds    []string
 	roots   map[string]simRoot
 	qdiscs  map[string]map[string]string // dev -> parent -> qdisc line
@@ -27,6 +30,7 @@ type simClass struct{ parent, rest string }
 
 func newTC() *tcSim {
 	return &tcSim{
+		ingress: map[string]map[uint32]string{},
 		roots:   map[string]simRoot{},
 		qdiscs:  map[string]map[string]string{},
 		classes: map[string]map[string]simClass{},
@@ -110,9 +114,33 @@ func (k *tcSim) run(_ context.Context, name string, args ...string) ([]byte, err
 	default:
 		return nil, nil
 	}
+	if args[0] == "-j" {
+		args = args[1:]
+	}
 	dev := val(args, "dev")
 	if args[0] == "filter" && has(args, "ingress") {
-		return nil, nil // the ingress qdisc is a world of its own
+		if k.ingress[dev] == nil {
+			k.ingress[dev] = map[uint32]string{}
+		}
+		switch args[1] {
+		case "add":
+			k.ingress[dev][1] = args[len(args)-1]
+		case "del":
+			if h := val(args, "handle"); h != "" {
+				n, _ := strconv.ParseUint(h, 0, 32)
+				delete(k.ingress[dev], uint32(n))
+			} else {
+				k.ingress[dev] = map[uint32]string{}
+			}
+		case "show":
+			rows := []map[string]any{}
+			for h, to := range k.ingress[dev] {
+				rows = append(rows, map[string]any{"protocol": "all", "pref": 1, "kind": "matchall", "chain": 0, "options": map[string]any{"handle": h, "actions": []map[string]string{{"kind": "mirred", "direction": "egress", "mirred_action": "redirect", "to_dev": to}}}})
+			}
+			raw, _ := json.Marshal(rows)
+			return raw, nil
+		}
+		return nil, nil
 	}
 	switch args[0] + " " + args[1] {
 	case "qdisc show":
@@ -126,6 +154,9 @@ func (k *tcSim) run(_ context.Context, name string, args ...string) ([]byte, err
 		return []byte(strings.Join(lines, "\n")), nil
 
 	case "qdisc del":
+		if has(args, "ingress") {
+			delete(k.ingress, dev)
+		}
 		if has(args, "root") {
 			k.wipe(dev)
 		}

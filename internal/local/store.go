@@ -514,6 +514,7 @@ func (s *Store) UpdateUser(u User) error {
 		if u.UUID != "" {
 			cur.UUID = u.UUID
 		}
+		cur.ImportedLimits = nil
 		cur.Password = u.Password
 		cur.Enabled = u.Enabled
 		cur.QuotaBytes = u.QuotaBytes
@@ -676,11 +677,7 @@ func (s *Store) Detach(keep *agentproto.State) error {
 	}
 	switch {
 	case keep != nil:
-		s.st.Inbounds, s.st.Users, s.st.Forwards = FromManaged(keep)
-		// The panel's exits and certificates come along; its probe config
-		// and ingresses are panel-side concepts and stay behind.
-		s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound = keep.Node.Outbounds, keep.Node.Routes, keep.Node.DefaultOutbound
-		s.st.Certificates = keep.Node.Certificates
+		s.importManagedLocked(keep)
 	case s.st.Snapshot != nil:
 		snap := s.st.Snapshot
 		s.st.Inbounds, s.st.Users, s.st.Forwards = snap.Inbounds, snap.Users, snap.Forwards
@@ -710,36 +707,96 @@ func (s *Store) notifyMode(m Mode) {
 // FromManaged converts a panel state into local objects.
 func FromManaged(st *agentproto.State) ([]Inbound, []User, []spec.Forward) {
 	var ibs []Inbound
+	var users []User
+	byUUID := map[string]int{}
 	for _, ib := range st.Node.Inbounds {
+		allowed := st.Users
+		if ib.ScopedUsers {
+			allowed = ib.Users
+		}
+		for _, su := range allowed {
+			idx, found := byUUID[su.UUID]
+			if !found {
+				idx = len(users)
+				byUUID[su.UUID] = idx
+				name := su.Name
+				if name == "" || name == su.UUID {
+					name = fmt.Sprintf("user-%d", su.ID)
+				}
+				users = append(users, User{ID: int64(idx + 1), TrafficID: su.ID, Name: name, UUID: su.UUID, Password: importedPassword(su), SubToken: authutil.Token(24), Enabled: true, CreatedAt: time.Now(), SpeedLimitMbps: su.SpeedLimitMbps, DeviceLimit: su.DeviceLimit, ImportedLimits: map[string]spec.User{}})
+			}
+			users[idx].InboundTags = append(users[idx].InboundTags, ib.Tag)
+			users[idx].ImportedLimits[ib.Tag] = su
+		}
 		ib.ScopedUsers, ib.Users = false, nil
 		ibs = append(ibs, Inbound{Inbound: ib, Enabled: true})
 	}
-	var users []User
-	seen := map[string]bool{}
-	add := func(u spec.User) {
-		if seen[u.UUID] {
-			return
+	// Keep unprovisioned identities visible but disabled. An empty inbound
+	// list must not turn a previously excluded user into an unrestricted one.
+	for _, su := range st.Users {
+		if _, ok := byUUID[su.UUID]; ok {
+			continue
 		}
-		seen[u.UUID] = true
-		name := u.Name
-		if name == "" || name == u.UUID {
-			name = fmt.Sprintf("user-%d", u.ID)
-		}
-		pw := u.Password
-		if pw == u.UUID {
-			pw = ""
-		}
-		users = append(users, User{ID: int64(len(users) + 1), Name: name, UUID: u.UUID, Password: pw, SubToken: authutil.Token(24), Enabled: true, CreatedAt: time.Now()})
-	}
-	for _, u := range st.Users {
-		add(u)
-	}
-	for _, ib := range st.Node.Inbounds {
-		for _, u := range ib.Users {
-			add(u)
-		}
+		byUUID[su.UUID] = len(users)
+		users = append(users, User{ID: int64(len(users) + 1), TrafficID: su.ID, Name: fmt.Sprintf("user-%d", su.ID), UUID: su.UUID, Password: importedPassword(su), SubToken: authutil.Token(24), Enabled: false, CreatedAt: time.Now()})
 	}
 	return ibs, users, append([]spec.Forward(nil), st.Forwards...)
+}
+
+func importedPassword(u spec.User) string {
+	if u.Password == u.UUID {
+		return ""
+	}
+	return u.Password
+}
+
+// ImportManaged also supports headless installations without an old local
+// snapshot. It does not replace an existing standalone administrator.
+func (s *Store) ImportManaged(st *agentproto.State) error {
+	if st == nil {
+		return errors.New("managed state is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.importManagedLocked(st)
+	s.st.Mode, s.st.Managed, s.st.Snapshot = ModeLocal, nil, nil
+	s.normalizeTrafficIDs()
+	return s.commit()
+}
+
+func (s *Store) importManagedLocked(st *agentproto.State) {
+	s.st.Inbounds, s.st.Users, s.st.Forwards = FromManaged(st)
+	node := st.Node
+	// Keep only policies that the standalone model cannot express; do not
+	// duplicate the subscribers or TLS credentials in the local state.
+	policies := spec.Node{AllowPrivateDest: node.AllowPrivateDest, PrivateDestAllow: node.PrivateDestAllow,
+		EgressByIngress: node.EgressByIngress, AuditRules: node.AuditRules, Decoy: node.Decoy}
+	s.st.ImportedNode = &policies
+	s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound = node.Outbounds, node.Routes, node.DefaultOutbound
+	s.st.Certificates, s.st.DNS = node.Certificates, node.DNS
+	s.st.Ingresses = nil // Inbound listen addresses already include the line binding.
+	s.st.Settings.UserSpeedLimitMbps = node.UserSpeedLimitMbps
+	s.st.Settings.ACMEEmail, s.st.Settings.CloudflareToken = "", ""
+	if node.ACME != nil {
+		s.st.Settings.ACMEEmail, s.st.Settings.CloudflareToken = node.ACME.Email, node.ACME.CloudflareToken
+	}
+	s.st.Settings.DecoyEnabled = node.Decoy != nil
+	if d := node.Decoy; d != nil {
+		s.st.Settings.DecoyDomain, s.st.Settings.DecoyUpstream, s.st.Settings.DecoyACME = d.Domain, d.Upstream, d.ACME
+		s.st.Settings.DecoyAllowPrivate, s.st.Settings.DecoyInsecure = d.AllowPrivate, d.Insecure
+	}
+	s.st.Overrides = map[string]string{}
+	for name, raw := range node.Overrides {
+		s.st.Overrides[name] = string(raw)
+	}
+	s.st.Komari = spec.Komari{}
+	s.st.DStatus = spec.DStatus{}
+	if st.Komari != nil {
+		s.st.Komari = *st.Komari
+	}
+	if st.DStatus != nil {
+		s.st.DStatus = *st.DStatus
+	}
 }
 
 // ---- panel.Driver ----------------------------------------------------------
@@ -776,6 +833,10 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...),
 		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
 		Certificates: append([]spec.Certificate(nil), s.st.Certificates...), DNS: append([]string(nil), s.st.DNS...), UserSpeedLimitMbps: s.st.Settings.UserSpeedLimitMbps}
+	if base := s.st.ImportedNode; base != nil {
+		node.AllowPrivateDest, node.PrivateDestAllow = base.AllowPrivateDest, base.PrivateDestAllow
+		node.EgressByIngress, node.AuditRules = base.EgressByIngress, base.AuditRules
+	}
 	if s.st.Settings.ACMEEmail != "" || s.st.Settings.CloudflareToken != "" {
 		node.ACME = &spec.ACME{Email: s.st.Settings.ACMEEmail, CloudflareToken: s.st.Settings.CloudflareToken}
 	}
@@ -790,6 +851,17 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	}
 	if st := s.st.Settings; st.DecoyEnabled && st.DecoyDomain != "" {
 		node.Decoy = &spec.Decoy{Domain: st.DecoyDomain, Port: spec.DefaultDecoyPort, Upstream: st.DecoyUpstream, ACME: st.DecoyACME, AllowPrivate: st.DecoyAllowPrivate, Insecure: st.DecoyInsecure}
+	}
+	if node.Decoy != nil && s.st.ImportedNode != nil && s.st.ImportedNode.Decoy != nil {
+		node.Decoy.Port = s.st.ImportedNode.Decoy.Port
+	}
+	specForInbound := func(u User, tag string) spec.User {
+		su := specOf(u)
+		if imported, ok := u.ImportedLimits[tag]; ok {
+			su.SpeedLimitMbps, su.DeviceLimit = imported.SpeedLimitMbps, imported.DeviceLimit
+			su.QuotaBytes, su.QuotaDays = imported.QuotaBytes, imported.QuotaDays
+		}
+		return su
 	}
 	bindFor := map[string]string{}
 	for _, g := range s.st.Ingresses {
@@ -809,13 +881,13 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 		restricted := false
 		for _, u := range usable {
 			if len(u.InboundTags) == 0 {
-				scoped = append(scoped, specOf(u))
+				scoped = append(scoped, specForInbound(u, ib.Tag))
 				continue
 			}
 			restricted = true
 			for _, t := range u.InboundTags {
 				if t == ib.Tag {
-					scoped = append(scoped, specOf(u))
+					scoped = append(scoped, specForInbound(u, ib.Tag))
 					break
 				}
 			}

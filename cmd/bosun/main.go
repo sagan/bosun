@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -47,6 +49,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/panel/captain"
 	"github.com/zeptop-dev/bosun/internal/panel/xboard"
+	"github.com/zeptop-dev/bosun/internal/removal"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/internal/telegram"
 	"github.com/zeptop-dev/bosun/internal/ui"
@@ -98,6 +101,12 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "internal-node-removal":
+		if len(os.Args) != 3 {
+			err = errors.New("removal plan is required")
+		} else {
+			err = removal.Run(os.Args[2])
+		}
 	case "run":
 		err = cmdRun(os.Args[2:])
 	case "render":
@@ -138,14 +147,15 @@ func usage() {
 
 // env is everything a command needs after the config is loaded.
 type env struct {
-	cfg    *config.Config
-	log    *slog.Logger
-	logs   *logring.Ring
-	driver panel.Driver // nil for driver "local"
-	reg    *core.Registry
-	inst   *coreinstall.Installer
-	conns  *connlog.Collector
-	audits *audit.Collector
+	cfgPath string
+	cfg     *config.Config
+	log     *slog.Logger
+	logs    *logring.Ring
+	driver  panel.Driver // nil for driver "local"
+	reg     *core.Registry
+	inst    *coreinstall.Installer
+	conns   *connlog.Collector
+	audits  *audit.Collector
 }
 
 func setup(args []string) (*env, error) {
@@ -299,7 +309,7 @@ func setup(args []string) (*env, error) {
 			reg.Register(c)
 		}
 	}
-	return &env{cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
+	return &env{cfgPath: *cfgPath, cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
 }
 
 func cmdRun(args []string) error {
@@ -369,6 +379,7 @@ func cmdRun(args []string) error {
 		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
 		ag.Version = version
 		ag.Upgrade = upgradeHook(log, upd)
+		ag.Remove = removalHook(e.cfgPath, cfg, e.driver)
 		if upd.ReleaseBuild() {
 			ag.Rollback = upd.Rollback
 		}
@@ -421,7 +432,7 @@ func cmdRun(args []string) error {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
 	}}
-	sup := &supervisor{cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, audits: e.audits, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
+	sup := &supervisor{cfgPath: e.cfgPath, cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, audits: e.audits, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -471,14 +482,15 @@ func fixedName(d panel.Driver) string {
 // supervisor runs one agent at a time and restarts it on the other driver
 // when the local store flips between local and managed mode.
 type supervisor struct {
-	cfg   *config.Config
-	log   *slog.Logger
-	reg   *core.Registry
-	inst  *coreinstall.Installer
-	mreg  *metrics.Registry
-	store *local.Store
-	fixed panel.Driver // config-pinned headless driver, or nil
-	ui    *ui.Server
+	cfgPath string
+	cfg     *config.Config
+	log     *slog.Logger
+	reg     *core.Registry
+	inst    *coreinstall.Installer
+	mreg    *metrics.Registry
+	store   *local.Store
+	fixed   panel.Driver // config-pinned headless driver, or nil
+	ui      *ui.Server
 	// upgrade handles a panel-requested release change.
 	upgrade    func(string)
 	certs      *certs.Manager
@@ -545,6 +557,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag := agent.New(s.cfg, d, s.reg, s.mreg, s.log)
 		ag.Version = version
 		ag.Upgrade = s.upgrade
+		ag.Remove = removalHook(s.cfgPath, s.cfg, d)
 		ag.Certs = s.certs
 		ag.Decoy = s.decoy
 		ag.Shaper = s.shaper
@@ -861,4 +874,19 @@ func loopbackPorts(cfg *config.Config) []int {
 		}
 	}
 	return out
+}
+
+func removalHook(path string, cfg *config.Config, driver panel.Driver) func(context.Context, agentproto.Job) error {
+	return func(ctx context.Context, j agentproto.Job) error {
+		c, ok := driver.(*captain.Client)
+		if !ok {
+			return errors.New("remote removal requires the Captain driver")
+		}
+		var p removal.Params
+		if err := json.Unmarshal(j.Params, &p); err != nil {
+			return errors.New("invalid removal request")
+		}
+		url, token := c.RemovalConnection()
+		return removal.Start(ctx, path, cfg, removal.Plan{ID: j.ID, Params: p, URL: url, Token: token, State: c.State()})
+	}
 }

@@ -71,7 +71,7 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 func (c *Core) Name() string { return "snell" }
 
 func (c *Core) Capabilities() core.Capabilities {
-	return core.Capabilities{Protocols: []spec.Protocol{spec.Snell}, SnellObfsTLS: true}
+	return spec.CapabilitiesForCore("snell")
 }
 
 // Render produces one config per inbound under Files["<tag>/snell-server.conf"].

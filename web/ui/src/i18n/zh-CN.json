@@ -249,7 +249,32 @@
     "wgAddressHint": "用户地址从这个网段按编号分配",
     "traffic": "流量",
     "noSniff": "关闭目标嗅探",
-    "noSniffHint": "默认开启：从 TLS/HTTP 头里识别真实域名，域名分流才能生效。只有嗅探导致某些客户端异常时才关。"
+    "noSniffHint": "默认开启：从 TLS/HTTP 头里识别真实域名，域名分流才能生效。只有嗅探导致某些客户端异常时才关。",
+    "coreSelection": {
+      "auto": "自动选择（推荐）",
+      "preview": "预计使用 {{core}}。自动选择遵循节点优先级；REALITY 优先 Xray。",
+      "enabledHint": "仅列出兼容内核；未启用的内核需先在节点配置中启用。",
+      "unknown": "内核可用性未知（节点版本较旧、离线或尚未上报），将在节点应用时校验。",
+      "notEnabled": "未启用",
+      "unavailable": "节点未启用此内核，请先启用或选择其他内核。",
+      "noAvailable": "节点尚未启用支持当前配置的内核，请先在节点中启用兼容内核。",
+      "loading": "正在检查兼容内核…",
+      "loadFailed": "无法检查内核，正在自动重试，请检查连接。",
+      "invalidJSON": "请先修正配置 JSON，再检查兼容内核。",
+      "running": "运行内核：{{core}}",
+      "notReported": "尚未确认运行内核",
+      "reasons": {
+        "protocol": "当前内核不支持此协议，请重新选择。",
+        "transport": "当前内核不支持此传输方式，请重新选择。",
+        "ss2022": "多用户 Shadowsocks 2022 需要 sing-box。",
+        "shadowTLS": "ShadowTLS 需要 sing-box。",
+        "fallbacks": "回落配置需要 Xray。",
+        "proxyProtocol": "PROXY protocol 需要 Xray。",
+        "snellMultiUser": "Snell 多用户模式需要 sing-box。",
+        "snellTLS": "Snell TLS 混淆需要 snell-server。",
+        "unknown": "无法识别此内核，请选择兼容内核。"
+      }
+    }
   },
   "ingress": {
     "title": "专线入口",

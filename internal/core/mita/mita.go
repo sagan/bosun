@@ -133,7 +133,7 @@ func supportsListen(version string) bool {
 }
 
 func (c *Core) Capabilities() core.Capabilities {
-	return core.Capabilities{Protocols: []spec.Protocol{spec.Mieru}, HotUserReload: true}
+	return spec.CapabilitiesForCore("mita")
 }
 
 // Render produces one config per inbound under Files["<tag>/server_config.json"].

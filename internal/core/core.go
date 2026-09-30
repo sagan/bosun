@@ -5,9 +5,6 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
-	"sort"
-	"strings"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -20,58 +17,8 @@ type Bundle struct {
 	Payload any               // adapter-private state carried from Render to Start/Apply
 }
 
-// Capabilities advertises what a core can serve.
-type Capabilities struct {
-	Protocols       []spec.Protocol
-	Transports      []string // stream transports; nil means only "tcp"
-	Shadowsocks2022 bool     // multi-user Shadowsocks 2022 ciphers
-	HotUserReload   bool     // true if users can change without a process restart
-	Fallbacks       bool     // VLESS/Trojan fallbacks to another local service
-	ProxyProtocol   bool     // inbounds may require a PROXY protocol header (relays behind)
-	SnellMultiUser  bool     // snell inbounds with per-user keys (sing-box)
-	SnellObfsTLS    bool     // snell "tls" obfuscation (snell-server only)
-}
-
-// Supports reports whether the core can serve inbound ib.
-func (c Capabilities) Supports(ib spec.Inbound) bool {
-	ok := false
-	for _, x := range c.Protocols {
-		if x == ib.Protocol {
-			ok = true
-			break
-		}
-	}
-	if !ok {
-		return false
-	}
-	if ib.Protocol == spec.Shadowsocks && strings.HasPrefix(ib.Cipher, "2022-") && !c.Shadowsocks2022 {
-		return false
-	}
-	if len(ib.Fallbacks) > 0 && !c.Fallbacks {
-		return false
-	}
-	if ib.AcceptProxyProtocol && !c.ProxyProtocol {
-		return false
-	}
-	if ib.Protocol == spec.Snell {
-		if ib.SnellMultiUser && !c.SnellMultiUser {
-			return false
-		}
-		if strings.EqualFold(ib.SnellObfs, "tls") && !c.SnellObfsTLS {
-			return false
-		}
-	}
-	tr := ib.TransportType()
-	if tr == "tcp" {
-		return true
-	}
-	for _, x := range c.Transports {
-		if x == tr {
-			return true
-		}
-	}
-	return false
-}
+// Capabilities is shared with the panel so selection and execution agree.
+type Capabilities = spec.CoreCapabilities
 
 // Core drives one upstream proxy binary as a child process.
 //
@@ -150,32 +97,17 @@ func (r *Registry) Split(inbounds []spec.Inbound) (byCore map[string][]spec.Inbo
 	return byCore, unsupported
 }
 
-func (r *Registry) pick(ib spec.Inbound) (string, error) {
-	if ib.Core != "" {
-		c, ok := r.cores[ib.Core]
-		if !ok {
-			return "", fmt.Errorf("inbound %q wants core %q which is not enabled", ib.Tag, ib.Core)
-		}
-		if !c.Capabilities().Supports(ib) {
-			return "", fmt.Errorf("inbound %q: core %q does not support %s over %s", ib.Tag, ib.Core, ib.Protocol, ib.TransportType())
-		}
-		return ib.Core, nil
-	}
-	// REALITY prefers xray: it is the only core with a fallback rate
-	// limit, which keeps a discovered node from being used as a relay.
-	if ib.TLS != nil && ib.TLS.Mode == spec.TLSReality {
-		if c, ok := r.cores["xray"]; ok && c.Capabilities().Supports(ib) {
-			return "xray", nil
-		}
-	}
+// Candidates returns the enabled adapters in configured priority order.
+func (r *Registry) Candidates() []spec.CoreCandidate {
+	out := make([]spec.CoreCandidate, 0, len(r.order))
 	for _, name := range r.order {
-		if r.cores[name].Capabilities().Supports(ib) {
-			return name, nil
-		}
+		out = append(out, spec.CoreCandidate{Name: name, Capabilities: r.cores[name].Capabilities()})
 	}
-	enabled := r.Names()
-	sort.Strings(enabled)
-	return "", fmt.Errorf("inbound %q: no enabled core supports %s over %s (enabled: %v)", ib.Tag, ib.Protocol, ib.TransportType(), enabled)
+	return out
+}
+
+func (r *Registry) pick(ib spec.Inbound) (string, error) {
+	return spec.SelectCore(ib, r.Candidates())
 }
 
 // InboundStatser is implemented by cores that count traffic per inbound

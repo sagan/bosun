@@ -1,3 +1,4 @@
+import { coreName } from '../lib/coreSelection'
 import { Accordion, ActionIcon, Badge, Button, Card, Group, Modal, Table, Text } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -62,7 +63,7 @@ export default function InboundsPage() {
                   </Table.Td>
                   <Table.Td>{tlsLabel(ib) && <Badge color={ib.tls?.mode === 2 ? 'grape' : 'blue'}>{tlsLabel(ib)}</Badge>}</Table.Td>
                   <Table.Td><Text size="xs" c={(ib.up ?? 0) + (ib.down ?? 0) ? undefined : 'dimmed'}>{(ib.up ?? 0) + (ib.down ?? 0) ? bytes((ib.up ?? 0) + (ib.down ?? 0)) : '—'}</Text></Table.Td>
-                  <Table.Td><Text size="sm">{ib.assigned_core || ib.core || <Text span c="dimmed">{t('inbounds.coreAuto')}</Text>}</Text></Table.Td>
+                  <Table.Td><Text size="sm">{ib.core ? coreName(ib.core) : t('inbounds.coreAuto')}</Text><Text size="xs" c="dimmed">{ib.assigned_core ? t('inbounds.coreSelection.running', { core: coreName(ib.assigned_core) }) : t('inbounds.coreSelection.notReported')}</Text></Table.Td>
                   <Table.Td><Badge color={ib.enabled ? 'teal' : 'gray'} style={{ cursor: readOnly ? 'default' : 'pointer' }} onClick={() => !readOnly && toggle.mutate(ib)}>{ib.enabled ? t('common.enabled') : t('common.disabled')}</Badge></Table.Td>
                   <Table.Td><Group gap={4} justify="flex-end" wrap="nowrap">
                     {!readOnly && <ActionIcon variant="subtle" color="gray" onClick={() => setEditing(ib)}><IconPencil size={16} /></ActionIcon>}

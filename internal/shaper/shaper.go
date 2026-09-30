@@ -736,7 +736,9 @@ func (s *Shaper) install(ctx context.Context, iface string, limits []Limit) erro
 func (s *Shaper) clear(ctx context.Context) error {
 	iface, err := s.iface(ctx)
 	if err == nil {
-		_, _ = s.run(ctx, "tc", "qdisc", "del", "dev", iface, "ingress")
+		if err := s.removeIngress(ctx, iface); err != nil {
+			return err
+		}
 		// Only a root qdisc of our own is thrown away. Someone else's HTB
 		// gives its classes back; any other root (an init script's fq
 		// pacing the line for BBR, say) is none of our business, and we

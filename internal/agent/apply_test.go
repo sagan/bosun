@@ -78,6 +78,10 @@ func TestApplySkipsUnsupportedAndUserlessMita(t *testing.T) {
 	if st.Skipped["snell"] == "" || st.Skipped["mieru"] == "" {
 		t.Fatalf("expected skip reasons for snell and mieru: %v", st.Skipped)
 	}
+	cores := a.CoreStatus()
+	if cores["mita"].Capabilities == nil || cores["mita"].Running || len(cores["mita"].Inbounds) != 0 || len(cores["singbox"].Inbounds) != 1 {
+		t.Fatalf("idle cores must stay available without claiming applied inbounds: %+v", cores)
+	}
 	// Users arrive: mita starts on the next apply and its skip clears.
 	a.users = []spec.User{{ID: 1, Name: "u", UUID: "x"}}
 	if err := a.applyInner(context.Background()); err != nil {
@@ -109,6 +113,22 @@ func TestApplyContinuesPastFailingCore(t *testing.T) {
 	}
 	if !sb.running {
 		t.Fatal("singbox should still have been applied")
+	}
+	if got := a.CoreStatus(); len(got["hysteria"].Inbounds) != 0 || len(got["singbox"].Inbounds) != 1 {
+		t.Fatalf("failed start advertised as running: %+v", got)
+	}
+	// A failed update may leave the previous process alive; do not claim the
+	// newly assigned inbound is running just because that process is alive.
+	sb.fail = errors.New("apply failed")
+	_ = a.applyInner(context.Background())
+	if got := a.CoreStatus()["singbox"]; !got.Running || len(got.Inbounds) != 0 {
+		t.Fatalf("failed apply advertised as applied: %+v", got)
+	}
+	sb.fail = nil
+	_ = a.applyInner(context.Background())
+	sb.running = false
+	if got := a.CoreStatus()["singbox"]; len(got.Inbounds) != 0 {
+		t.Fatalf("crashed core advertised as running: %+v", got)
 	}
 }
 

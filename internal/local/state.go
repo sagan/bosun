@@ -26,8 +26,10 @@ const (
 
 // State is the whole standalone configuration, persisted as one JSON file.
 type State struct {
-	Revision            int64 `json:"revision"`
-	UserTrafficSequence int64 `json:"user_traffic_sequence,omitempty"`
+	// ImportedNode preserves node policies without standalone UI controls.
+	ImportedNode        *spec.Node `json:"imported_node,omitempty"`
+	Revision            int64      `json:"revision"`
+	UserTrafficSequence int64      `json:"user_traffic_sequence,omitempty"`
 
 	Admin Admin `json:"admin"`
 	// APITokens grant the same access as the admin login (standalone only).
@@ -233,13 +235,15 @@ type Inbound struct {
 
 // User is a local subscriber with its own accounting.
 type User struct {
-	TrafficID int64  `json:"traffic_id,omitempty"` // immutable core accounting identity
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	UUID      string `json:"uuid"`
-	Password  string `json:"password"`
-	SubToken  string `json:"sub_token"`
-	Enabled   bool   `json:"enabled"`
+	// ImportedLimits preserves per-inbound limits until the user is edited locally.
+	ImportedLimits map[string]spec.User `json:"imported_limits,omitempty"`
+	TrafficID      int64                `json:"traffic_id,omitempty"` // immutable core accounting identity
+	ID             int64                `json:"id"`
+	Name           string               `json:"name"`
+	UUID           string               `json:"uuid"`
+	Password       string               `json:"password"`
+	SubToken       string               `json:"sub_token"`
+	Enabled        bool                 `json:"enabled"`
 
 	QuotaBytes int64      `json:"quota_bytes"` // 0 = unlimited
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`

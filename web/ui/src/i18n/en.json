@@ -249,7 +249,32 @@
     "wgAddressHint": "Client addresses are assigned from this network by user id",
     "traffic": "Traffic",
     "noSniff": "Disable destination sniffing",
-    "noSniffHint": "On by default: reads the real host from TLS/HTTP so domain rules apply. Turn off only if sniffing breaks a client."
+    "noSniffHint": "On by default: reads the real host from TLS/HTTP so domain rules apply. Turn off only if sniffing breaks a client.",
+    "coreSelection": {
+      "auto": "Automatic (recommended)",
+      "preview": "Expected core: {{core}}. Automatic follows the node’s priority; REALITY prefers Xray.",
+      "enabledHint": "Only compatible cores are listed. Enable unavailable cores in the node configuration first.",
+      "unknown": "Core availability is unknown (older, offline or unreported node). The node will validate on apply.",
+      "notEnabled": "Not enabled",
+      "unavailable": "This core is not enabled on the node. Enable it there or choose another core.",
+      "noAvailable": "No enabled core supports this configuration. Enable a compatible core on the node first.",
+      "loading": "Checking compatible cores…",
+      "loadFailed": "Could not check cores. Retrying automatically; check the connection.",
+      "invalidJSON": "Fix the settings JSON to check compatible cores.",
+      "running": "Running: {{core}}",
+      "notReported": "Running core not confirmed",
+      "reasons": {
+        "protocol": "This core does not support the protocol. Choose another core.",
+        "transport": "This core does not support the transport. Choose another core.",
+        "ss2022": "Multi-user Shadowsocks 2022 requires sing-box.",
+        "shadowTLS": "ShadowTLS requires sing-box.",
+        "fallbacks": "Fallbacks require Xray.",
+        "proxyProtocol": "PROXY protocol requires Xray.",
+        "snellMultiUser": "Multi-user Snell requires sing-box.",
+        "snellTLS": "Snell TLS obfuscation requires snell-server.",
+        "unknown": "This core is not recognized. Choose a compatible core."
+      }
+    }
   },
   "ingress": {
     "title": "Line ingresses",

@@ -83,6 +83,9 @@ type Report struct {
 	// panel can apply it exactly once. 0 = an agent that does not number
 	// its batches (before bosun 0.45).
 	TrafficSeq uint64 `json:"traffic_seq,omitempty"`
+	// TrafficEpoch identifies the durable journal. New panels retain a cursor
+	// per epoch so reinstalls and delayed old deliveries cannot reset it.
+	TrafficEpoch string `json:"traffic_epoch,omitempty"`
 	// TrafficWindowSeconds is how long the batch has been accumulating,
 	// so a rate can be derived from it (a backlog after an outage covers
 	// many minutes, not one).

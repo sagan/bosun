@@ -144,6 +144,9 @@ func (s *Store) Routing() Routing {
 // ValidateRouting checks tags: every rule and the default must point at a
 // defined outbound, chains must not loop.
 func ValidateRouting(nr *Routing) error {
+	if err := spec.ValidateRoutingReferences(nr.Outbounds, nr.Routes, nr.DefaultOutbound); err != nil {
+		return err
+	}
 	tags := map[string]bool{"direct": true, "block": true}
 	for i := range nr.Outbounds {
 		o := &nr.Outbounds[i]

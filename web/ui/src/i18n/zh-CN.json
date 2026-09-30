@@ -852,12 +852,16 @@
       "http": "HTTP 服务",
       "download": "下载吞吐",
       "mtr": "MTR",
-      "traceroute": "路由追踪"
+      "traceroute": "路由追踪",
+      "exit": "出口 IP、地区与服务"
     },
     "outcomes": {
       "busy": "已有检查正在运行",
       "unavailable": "尚未安装工具",
-      "failed": "工具执行失败，请查看输出"
+      "failed": "工具执行失败，请查看输出",
+      "install_failed": "检测工具下载或校验失败",
+      "report_too_large": "报告超出大小限制",
+      "invalid_report": "无法识别检测报告"
     },
     "completed": "报告已完成"
   },
@@ -881,5 +885,43 @@
       "error": "采集失败或超时",
       "unsupported": "GPU 采集需要 Linux"
     }
+  },
+  "exitDiagnostic": {
+    "report": "出口检测报告",
+    "export": "导出 JSON",
+    "country": "ASN 注册地区",
+    "reputation": "地址信誉",
+    "risk": "风险评分：{{score}}",
+    "evidence": "第三方判断可能不一致或查询失败。可达不代表账号可用或一定能播放；无法确定时保留未知结果。",
+    "provider": "数据来源",
+    "service": "服务",
+    "verdict": "检测结果",
+    "details": "详情",
+    "services": "同时检测流媒体服务与 AI 接口",
+    "hint": "按需检测 IPv4/IPv6，向外部服务查询地区和地址信誉。最长 90 秒，首次运行会下载已校验的工具。需要 bosun v0.57.0。"
+  },
+  "configPresets": {
+    "inbound": "入站预设",
+    "outbounds": "出站片段",
+    "routes": "路由片段",
+    "choose": "选择预设",
+    "preview": "预览变更",
+    "edit": "编辑预设",
+    "capture": "存为预设",
+    "editor": "预设库",
+    "name": "名称",
+    "fragment": "结构化配置",
+    "fragmentHint": "可编辑或删除字段以形成可复用片段。不接受内核原始覆盖配置。",
+    "inboundHint": "不保存服务器密钥、用户、端口和证书路径。载入时生成新的服务器密钥。",
+    "routingHint": "片段追加到当前草稿。出站凭据会保存在预设中；WARP 使用各节点自己的账户。",
+    "inboundImpact": "仅修改当前入站草稿。保存可能更换服务器密钥并中断现有客户端；监听位置和用户权限保持不变。",
+    "routingImpact": "按顺序追加路由和出站。保存会影响此节点所有入站的路由；保留现有 DNS 和默认出口。",
+    "affected": "受影响入站",
+    "field": "字段",
+    "before": "变更前",
+    "after": "变更后",
+    "noChanges": "配置项没有差异，入站服务器密钥仍会重新生成。",
+    "load": "载入编辑器",
+    "stale": "草稿已改变，请重新预览。"
   }
 }

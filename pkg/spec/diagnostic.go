@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -15,6 +16,7 @@ const DiagnosticTTLSeconds = 120
 // It deliberately has no command, flags, headers or request body fields.
 type DiagnosticRequest struct {
 	Type     string `json:"type"`
+	Services bool   `json:"services,omitempty"`
 	Target   string `json:"target"`
 	SourceIP string `json:"source_ip,omitempty"`
 	Resolver string `json:"resolver,omitempty"` // DNS only: literal IP, optional port
@@ -27,6 +29,7 @@ type DiagnosticParams struct {
 
 type DiagnosticResult struct {
 	Type        string            `json:"type"`
+	Exit        json.RawMessage   `json:"exit,omitempty"`
 	StartedAt   int64             `json:"started_at"`
 	DurationMs  float64           `json:"duration_ms"`
 	Outcome     string            `json:"outcome"`
@@ -71,7 +74,14 @@ func (r DiagnosticRequest) Validate() error {
 			return fmt.Errorf("DNS resolver must be an IP with an optional port")
 		}
 	}
+	if r.Services && r.Type != "exit" {
+		return fmt.Errorf("service checks are only valid for exit diagnostics")
+	}
 	switch r.Type {
+	case "exit":
+		if r.Target != "" || r.Resolver != "" {
+			return fmt.Errorf("exit diagnostics use fixed providers; no target or resolver is accepted")
+		}
 	case "dns", "mtr", "traceroute":
 		if !diagnosticHost(r.Target) || (r.Type == "dns" && net.ParseIP(r.Target) != nil) {
 			return fmt.Errorf("target must be a hostname (or an IP for route checks)")
@@ -87,7 +97,7 @@ func (r DiagnosticRequest) Validate() error {
 			return fmt.Errorf("target must be an HTTP(S) URL without credentials or a fragment")
 		}
 	default:
-		return fmt.Errorf("type must be dns, tcp, http, download, mtr or traceroute")
+		return fmt.Errorf("type must be dns, tcp, http, download, mtr, traceroute or exit")
 	}
 	return nil
 }

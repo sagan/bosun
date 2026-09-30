@@ -76,7 +76,11 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		}
 		jctx, cancel := context.WithDeadline(ctx, time.Unix(p.ExpiresAt, 0))
 		defer cancel()
-		out.Result, _ = json.Marshal(netdiag.Default.Run(jctx, p.DiagnosticRequest))
+		dataDir := ""
+		if a.cfg != nil {
+			dataDir = a.cfg.DataDir
+		}
+		out.Result, _ = json.Marshal(netdiag.Default.Run(jctx, p.DiagnosticRequest, dataDir))
 	case "reality_scan":
 		var p struct {
 			Hosts []string `json:"hosts"`

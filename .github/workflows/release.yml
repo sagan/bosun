@@ -30,15 +30,20 @@ jobs:
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
       - run: make linux VERSION="${GITHUB_REF_NAME}"
+      - run: scripts/build-geocheck.sh bin
+      - name: diagnostic tool schema check
+        run: BOSUN_TEST_GEOCHECK="$PWD/bin/geocheck-linux-amd64" go test ./internal/netdiag -run TestInstalledGeoCheckSchema
+      - name: diagnostic tool vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -mode=binary bin/geocheck-linux-amd64
       # Nodes run on Alpine too, and a binary linked against the builder's
       # glibc does not start on musl at all ("no such file or directory").
       - name: binaries are static
         run: |
-          for f in bin/bosun-linux-*; do
+          for f in bin/bosun-linux-* bin/geocheck-linux-*; do
             file "$f"
             file "$f" | grep -q 'statically linked' || { echo "$f is dynamically linked"; exit 1; }
           done
-      - run: cd bin && sha256sum bosun-linux-* > SHA256SUMS && cat SHA256SUMS
+      - run: cd bin && sha256sum bosun-linux-* geocheck-linux-* geocheck-LICENSE.txt > SHA256SUMS && cat SHA256SUMS
       - uses: softprops/action-gh-release@v3
         if: github.event_name == 'push'
         with:
@@ -46,6 +51,9 @@ jobs:
           files: |
             bin/bosun-linux-amd64
             bin/bosun-linux-arm64
+            bin/geocheck-linux-amd64
+            bin/geocheck-linux-arm64
+            bin/geocheck-LICENSE.txt
             bin/SHA256SUMS
 
   image:

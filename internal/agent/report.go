@@ -23,96 +23,21 @@ type trafficKey struct {
 // report collects per-user traffic from every running core and pushes it
 // with a host snapshot. It returns true when the panel signals newer state.
 func (a *Agent) report(ctx context.Context) bool {
+	if rep, ok := a.driver.(panel.Reporter); ok {
+		return a.reportDurable(ctx, rep)
+	}
 	if a.pendingTraffic == nil {
 		a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
-		a.pendingInbound = map[string]spec.Traffic{}
-		a.pendingOutbound = map[string]spec.Traffic{}
 	}
-	list, perInboundList := a.collectUserTraffic(ctx)
-	perInbound := a.collectTagged(ctx, a.pendingInbound, "inbound", func(c core.Core) (map[string]spec.Traffic, error) {
-		is, ok := c.(core.InboundStatser)
-		if !ok {
-			return nil, errSkip
-		}
-		return is.InboundStats(ctx, true)
-	})
-	perOutbound := a.collectTagged(ctx, a.pendingOutbound, "outbound", func(c core.Core) (map[string]spec.Traffic, error) {
-		os, ok := c.(core.OutboundStatser)
-		if !ok {
-			return nil, errSkip
-		}
-		return os.OutboundStats(ctx, true)
-	})
-	host := a.SampleHost(ctx)
-
-	if rep, ok := a.driver.(panel.Reporter); ok {
-		full := a.buildReport(perInboundList, host)
-		full.Jobs = a.takeJobResults()
-		if len(perInbound) > 0 {
-			full.Inbounds = perInbound
-		}
-		if len(perOutbound) > 0 {
-			full.Outbounds = perOutbound
-		}
-		a.statusMu.Lock()
-		if a.trafficSeq == 0 {
-			// Seeded from the clock, not from 1: the number lives in
-			// memory, and a series that restarted at 1 after every
-			// restart would make the panel see numbers it had already
-			// passed. Seconds are plenty — one batch per report.
-			a.trafficSeq = uint64(time.Now().Unix())
-		}
-		if a.trafficSince.IsZero() {
-			a.trafficSince = time.Now()
-		}
-		full.TrafficSeq = a.trafficSeq
-		full.TrafficWindowSeconds = int(time.Since(a.trafficSince).Seconds())
-		a.statusMu.Unlock()
-		changed, err := rep.Report(ctx, full)
-		if err != nil {
-			// The deltas stay in the pending maps and go out with the next
-			// report; job results are requeued the same way.
-			a.requeueJobResults(full.Jobs)
-			a.reportFailures.Add(1)
-			a.log.Error("report failed; traffic deltas kept for the next attempt", "users", len(list), "err", err)
-			a.statusMu.Lock()
-			a.lastReportErr = err.Error()
-			a.statusMu.Unlock()
-			return false
-		}
-		a.pendingTraffic, a.pendingInbound, a.pendingOutbound = map[trafficKey]*spec.UserTraffic{}, map[string]spec.Traffic{}, map[string]spec.Traffic{}
-		// The batch was accepted: the next one is a new number over a new
-		// window. A failed report keeps both, so the retry carries the
-		// same number and the panel applies it once.
-		a.statusMu.Lock()
-		a.trafficSeq++
-		a.trafficSince = time.Now()
-		a.statusMu.Unlock()
-		a.lastReportOK.Store(time.Now().Unix())
-		a.log.Debug("report sent", "users", len(list), "state_changed", changed)
-		a.statusMu.Lock()
-		a.lastReport, a.lastReportErr = time.Now(), ""
-		if a.pendingDoctor != nil {
-			a.sentDoctor, a.sentDoctorAt, a.pendingDoctor = a.pendingDoctor, time.Now(), nil
-		}
-		a.statusMu.Unlock()
-		if ur, ok := a.driver.(panel.UpgradeRequester); ok && a.Upgrade != nil {
-			if v := ur.UpgradeRequested(); v != "" && v != a.upgradeAsked {
-				a.upgradeAsked = v
-				a.log.Info("panel requested upgrade", "version", v)
-				go a.Upgrade(v)
-			}
-		}
-		return changed
-	}
+	list, _ := a.collectUserTraffic(ctx)
 	if len(list) > 0 {
 		if err := a.driver.PushTraffic(ctx, list); err != nil {
-			a.log.Error("push traffic failed", "users", len(list), "err", err)
+			a.log.Error("push traffic failed", "err", err)
 		} else {
-			a.log.Debug("traffic pushed", "users", len(list))
+			a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
 		}
 	}
-	if err := a.driver.PushStatus(ctx, host); err != nil {
+	if err := a.driver.PushStatus(ctx, a.SampleHost(ctx)); err != nil {
 		a.log.Warn("push status failed", "err", err)
 	}
 	return false

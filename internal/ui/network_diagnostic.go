@@ -2,6 +2,7 @@ package ui
 
 import (
 	"net/http"
+	"path/filepath"
 
 	"github.com/zeptop-dev/bosun/internal/netdiag"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -23,5 +24,5 @@ func (s *Server) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
 	}
 	// The normal request log records the route and outcome, never URL query
 	// strings or diagnostic output. The authenticated local admin initiated it.
-	ok(w, netdiag.Default.Run(r.Context(), in))
+	ok(w, netdiag.Default.Run(r.Context(), in, filepath.Dir(s.d.Store.Path())))
 }

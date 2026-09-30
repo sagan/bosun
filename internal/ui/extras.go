@@ -16,6 +16,7 @@ import (
 func (s *Server) extraRoutes() {
 	m := s.mux
 	auth := s.requireAuth
+	s.registerConfigPresets(m, auth)
 	m.HandleFunc("GET /api/ingresses", auth(s.listIngresses))
 	m.HandleFunc("POST /api/ingresses", auth(s.local(s.createIngress)))
 	m.HandleFunc("PUT /api/ingresses/{id}", auth(s.local(s.updateIngress)))

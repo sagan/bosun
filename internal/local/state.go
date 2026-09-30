@@ -27,9 +27,11 @@ const (
 // State is the whole standalone configuration, persisted as one JSON file.
 type State struct {
 	// ImportedNode preserves node policies without standalone UI controls.
-	ImportedNode        *spec.Node `json:"imported_node,omitempty"`
-	Revision            int64      `json:"revision"`
-	UserTrafficSequence int64      `json:"user_traffic_sequence,omitempty"`
+	ImportedNode        *spec.Node          `json:"imported_node,omitempty"`
+	ConfigPresets       []spec.ConfigPreset `json:"config_presets,omitempty"`
+	PresetSequence      int64               `json:"preset_sequence,omitempty"`
+	Revision            int64               `json:"revision"`
+	UserTrafficSequence int64               `json:"user_traffic_sequence,omitempty"`
 
 	Admin Admin `json:"admin"`
 	// APITokens grant the same access as the admin login (standalone only).

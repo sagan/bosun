@@ -852,12 +852,16 @@
       "http": "HTTP service",
       "download": "Download throughput",
       "mtr": "MTR",
-      "traceroute": "Traceroute"
+      "traceroute": "Traceroute",
+      "exit": "Exit IP, region and services"
     },
     "outcomes": {
       "busy": "Another check is running",
       "unavailable": "Tool not installed",
-      "failed": "Tool failed; see output"
+      "failed": "Tool failed; see output",
+      "install_failed": "Diagnostic tool download or verification failed",
+      "report_too_large": "Report exceeded the size limit",
+      "invalid_report": "Unrecognized diagnostic report"
     },
     "completed": "Report complete"
   },
@@ -881,5 +885,43 @@
       "error": "Collection failed or timed out",
       "unsupported": "GPU collection requires Linux"
     }
+  },
+  "exitDiagnostic": {
+    "report": "Exit report",
+    "export": "Export JSON",
+    "country": "ASN country",
+    "reputation": "Address reputation",
+    "risk": "Risk score: {{score}}",
+    "evidence": "Third-party observations may disagree or fail. Reachability does not guarantee account access or playback; unknown results remain unknown.",
+    "provider": "Provider",
+    "service": "Service",
+    "verdict": "Observation",
+    "details": "Details",
+    "services": "Include service availability and AI endpoint checks",
+    "hint": "Checks both address families and queries external geolocation/reputation providers. Runs only on request, for at most 90 seconds; the first run downloads the verified tool. Requires bosun v0.57.0."
+  },
+  "configPresets": {
+    "inbound": "Inbound presets",
+    "outbounds": "Outbound fragments",
+    "routes": "Routing fragments",
+    "choose": "Choose a preset",
+    "preview": "Preview changes",
+    "edit": "Edit preset",
+    "capture": "Save as preset",
+    "editor": "Preset library",
+    "name": "Name",
+    "fragment": "Typed configuration",
+    "fragmentHint": "Edit or remove fields to create a reusable fragment. Raw core overrides are not accepted.",
+    "inboundHint": "Server keys, users, ports and certificate paths are stripped. Applying generates fresh server keys.",
+    "routingHint": "Fragments append to the current draft. Outbound credentials are stored with the preset; WARP uses each node’s own account.",
+    "inboundImpact": "Only this inbound draft changes. Saving can rotate server keys and interrupt clients. Placement and user permissions stay unchanged.",
+    "routingImpact": "Rules and outbounds append in order. Saving affects routing for all inbounds on this node; DNS and the default exit are preserved.",
+    "affected": "Affected inbounds",
+    "field": "Field",
+    "before": "Before",
+    "after": "After",
+    "noChanges": "No settings changed. Inbound server keys will still be regenerated.",
+    "load": "Load into editor",
+    "stale": "The draft changed. Preview again before loading."
   }
 }

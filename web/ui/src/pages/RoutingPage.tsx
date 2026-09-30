@@ -7,6 +7,7 @@ import { api, type Inbound, type Outbound, type Remote, type Routing } from '../
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
 import { bytes } from '../lib/format'
+import { ConfigPresets } from '../components/ConfigPresets'
 import { WarpCard, warpTemplate, type WarpAccount } from '../components/WarpCard'
 import { PageHeader } from '../components/PageHeader'
 
@@ -46,6 +47,7 @@ export default function RoutingPage({ embedded }: { embedded?: boolean }) {
       {embedded ? <Text size="xs" c="dimmed" mb="sm" maw={720}>{t('routing.hint')}</Text> : <PageHeader title={t('routing.title')} subtitle={t('routing.hint')} />}
       <Card>
         <Stack gap="xs">
+          {!readOnly && <><ConfigPresets kind="outbounds" current={() => nr} onLoad={v => setNr(v as Routing)} affected={inboundTags} /><ConfigPresets kind="routes" current={() => nr} onLoad={v => setNr(v as Routing)} affected={inboundTags} /></>}
           <Text size="sm" fw={600}>{t('routing.outbounds')}</Text>
           {nr.outbounds.map((o, i) => (
             <Group key={i} justify="space-between" wrap="nowrap">

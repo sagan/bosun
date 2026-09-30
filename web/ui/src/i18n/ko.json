@@ -852,12 +852,16 @@
       "http": "HTTP 서비스",
       "download": "다운로드 속도",
       "mtr": "MTR",
-      "traceroute": "경로 추적"
+      "traceroute": "경로 추적",
+      "exit": "출구 IP, 지역 및 서비스"
     },
     "outcomes": {
       "busy": "다른 진단 실행 중",
       "unavailable": "도구가 설치되지 않음",
-      "failed": "도구 실행 실패: 출력 확인"
+      "failed": "도구 실행 실패: 출력 확인",
+      "install_failed": "진단 도구 다운로드 또는 검증 실패",
+      "report_too_large": "보고서 크기 제한 초과",
+      "invalid_report": "알 수 없는 진단 보고서"
     },
     "completed": "보고서 완료"
   },
@@ -881,5 +885,43 @@
       "error": "수집 실패 또는 시간 초과",
       "unsupported": "GPU 수집에는 Linux가 필요합니다"
     }
+  },
+  "exitDiagnostic": {
+    "report": "출구 진단 보고서",
+    "export": "JSON 내보내기",
+    "country": "ASN 등록 국가",
+    "reputation": "주소 평판",
+    "risk": "위험 점수: {{score}}",
+    "evidence": "외부 서비스의 판단이 다르거나 실패할 수 있습니다. 연결 가능해도 계정 이용이나 재생을 보장하지 않습니다. 불확실한 결과는 알 수 없음으로 유지됩니다.",
+    "provider": "출처",
+    "service": "서비스",
+    "verdict": "결과",
+    "details": "상세",
+    "services": "스트리밍 서비스 및 AI 엔드포인트 검사 포함",
+    "hint": "IPv4/IPv6 및 외부 위치·주소 평판 서비스를 요청 시 검사합니다. 최대 90초이며 처음에는 검증된 도구를 다운로드합니다. bosun v0.57.0이 필요합니다."
+  },
+  "configPresets": {
+    "inbound": "인바운드 프리셋",
+    "outbounds": "아웃바운드 조각",
+    "routes": "라우팅 조각",
+    "choose": "프리셋 선택",
+    "preview": "변경 미리보기",
+    "edit": "프리셋 편집",
+    "capture": "프리셋으로 저장",
+    "editor": "프리셋 라이브러리",
+    "name": "이름",
+    "fragment": "구조화된 설정",
+    "fragmentHint": "필드를 편집하거나 삭제하여 재사용할 조각을 만드세요. 원시 코어 설정은 허용되지 않습니다.",
+    "inboundHint": "서버 키, 사용자, 포트 및 인증서 경로는 저장하지 않습니다. 불러올 때 새 키를 생성합니다.",
+    "routingHint": "현재 초안에 추가합니다. 아웃바운드 인증 정보는 저장되며 WARP는 각 노드의 계정을 사용합니다.",
+    "inboundImpact": "현재 인바운드 초안만 변경합니다. 저장 시 키가 바뀌어 기존 클라이언트 연결이 중단될 수 있습니다. 위치와 사용자 권한은 유지합니다.",
+    "routingImpact": "순서대로 추가합니다. 저장하면 이 노드의 모든 인바운드 라우팅에 영향을 줍니다. DNS와 기본 출구는 유지합니다.",
+    "affected": "영향받는 인바운드",
+    "field": "필드",
+    "before": "이전",
+    "after": "이후",
+    "noChanges": "설정 차이는 없지만 서버 키는 다시 생성됩니다.",
+    "load": "편집기에 불러오기",
+    "stale": "초안이 변경되었습니다. 다시 미리 보세요."
   }
 }

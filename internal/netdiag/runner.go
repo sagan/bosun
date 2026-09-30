@@ -27,7 +27,7 @@ type Runner struct {
 	busy atomic.Bool
 }
 
-func (r *Runner) Run(parent context.Context, in spec.DiagnosticRequest) (out spec.DiagnosticResult) {
+func (r *Runner) Run(parent context.Context, in spec.DiagnosticRequest, dataDirs ...string) (out spec.DiagnosticResult) {
 	start := time.Now()
 	out.Type, out.StartedAt = in.Type, start.Unix()
 	defer func() { out.DurationMs = float64(time.Since(start)) / float64(time.Millisecond) }()
@@ -40,9 +40,19 @@ func (r *Runner) Run(parent context.Context, in spec.DiagnosticRequest) (out spe
 		return
 	}
 	defer r.busy.Store(false)
-	ctx, cancel := context.WithTimeout(parent, MaxDuration)
+	duration := MaxDuration
+	if in.Type == "exit" {
+		duration = 90 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(parent, duration)
 	defer cancel()
 	switch in.Type {
+	case "exit":
+		root := ""
+		if len(dataDirs) > 0 {
+			root = dataDirs[0]
+		}
+		out.Exit, out.Outcome = runExit(ctx, in, root)
 	case "dns":
 		resolver := &net.Resolver{PreferGo: true}
 		resolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {

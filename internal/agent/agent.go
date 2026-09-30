@@ -161,14 +161,13 @@ type Agent struct {
 	// Doctor: last periodic report, the one last sent to the panel and the
 	// one waiting to ride on the next report; when the panel last accepted
 	// a report and the last report error (for the panel check).
-	lastDoctor    *doctor.Report
-	sentDoctor    *doctor.Report
-	sentDoctorAt  time.Time
-	pendingDoctor *doctor.Report
-	lastReport    time.Time
-	trafficSeq    uint64    // batch number of the pending deltas
-	trafficSince  time.Time // when the pending deltas started accumulating
-	lastReportErr string
+	lastDoctor     *doctor.Report
+	sentDoctor     *doctor.Report
+	sentDoctorAt   time.Time
+	pendingDoctor  *doctor.Report
+	lastReport     time.Time
+	trafficJournal *trafficJournal // owned by the serial report loop
+	lastReportErr  string
 }
 
 // ReloadCerts asks the agent to restart the cores so renewed certificate

@@ -4,6 +4,7 @@ import { IconRefresh } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Fallback, type FallbackLimit, type Inbound, type Ingress, type IngressInput, type Settings } from '../lib/api'
+import { ConfigPresets } from './ConfigPresets'
 import { useCoreSelection } from '../lib/coreSelection'
 import { useQuery } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
@@ -217,6 +218,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   return (
     <form onSubmit={form.onSubmit(submit)}>
       <Stack>
+        <ConfigPresets kind="inbound" current={() => toInbound(form.values)} onLoad={value => form.setValues(toValues({ ...toInbound(form.values), ...value as object } as unknown as Inbound))} affected={form.values.tag ? [form.values.tag] : []} />
         <div>
           <Text size="sm" fw={600}>{t('inbounds.recipe')}</Text>
           <Text size="xs" c="dimmed" mb="xs">{t('inbounds.recipeHint')}</Text>

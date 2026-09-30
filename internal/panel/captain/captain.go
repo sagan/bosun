@@ -6,6 +6,7 @@ package captain
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -434,4 +435,16 @@ func (c *Client) RemovalConnection() (string, string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.cfg.URL, c.token
+}
+
+// TrafficIdentity binds the local journal to the authenticated panel/node.
+// Re-pairing starts another journal; old unacknowledged data is not sent to a
+// different account space, and no credentials are persisted in the journal.
+func (c *Client) TrafficIdentity() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.token == "" {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+c.token)))
 }

@@ -50,6 +50,7 @@ type Release struct {
 
 // Binary is the executable file name per core.
 var Binary = map[string]string{
+	"geocheck": "geocheck", // optional diagnostic tool; intentionally absent from the core manifest
 	"singbox":  "sing-box",
 	"xray":     "xray",
 	"mita":     "mita",

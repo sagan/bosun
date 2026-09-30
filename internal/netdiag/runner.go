@@ -134,7 +134,9 @@ func routeArgs(in spec.DiagnosticRequest, ip net.IP) []string {
 	}
 	args := []string{family, "-n", "-m", "20"}
 	if in.Type == "mtr" {
-		args = append(args, "-r", "-c", "5", "-i", "0.2")
+		// mtr rejects sub-second intervals for non-root callers even when
+		// its packet helper has the capability to send probes.
+		args = append(args, "-r", "-c", "5", "-i", "1")
 		if in.SourceIP != "" {
 			args = append(args, "-a", in.SourceIP)
 		}

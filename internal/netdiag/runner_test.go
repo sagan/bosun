@@ -142,7 +142,7 @@ func TestDNSCustomResolver(t *testing.T) {
 
 func TestRouteFixedArgumentsBoundedOutputAndDeadline(t *testing.T) {
 	in := spec.DiagnosticRequest{Type: "mtr", Target: "example.com", SourceIP: "10.10.0.2"}
-	if got := routeArgs(in, net.ParseIP("192.0.2.10")); !reflect.DeepEqual(got, []string{"-4", "-n", "-m", "20", "-r", "-c", "5", "-i", "0.2", "-a", "10.10.0.2", "192.0.2.10"}) {
+	if got := routeArgs(in, net.ParseIP("192.0.2.10")); !reflect.DeepEqual(got, []string{"-4", "-n", "-m", "20", "-r", "-c", "5", "-i", "1", "-a", "10.10.0.2", "192.0.2.10"}) {
 		t.Fatal(got)
 	}
 	dir := t.TempDir()

@@ -1,155 +1,56 @@
-import { NumberInput, Textarea, TagsInput, Alert, Badge, Button, Card, Group, PasswordInput, Select, SimpleGrid, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core'
-import { useForm } from '@mantine/form'
-import { modals } from '@mantine/modals'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { KomariCard } from '../components/KomariCard'
+import { DStatusCard } from '../components/DStatusCard'
+import { Alert, Anchor, Box, Button, Card, Group, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
+import { IconArrowLeft, IconArrowRight, IconSearch } from '@tabler/icons-react'
+import { Link, useParams } from 'react-router-dom'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type CoreRelease, type Settings, type Status } from '../lib/api'
-import { UpdateCard } from '../components/UpdateCard'
-import { BackupCard } from '../components/BackupCard'
-import { TwoFactorCard } from '../components/TwoFactorCard'
-import { TokensCard } from '../components/TokensCard'
-import { OverridesCard } from '../components/OverridesCard'
-import { useAuth } from '../lib/auth'
-import { when } from '../lib/format'
-import { dnsToast, toast, type DNSResult } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
+import { settingsAreas, settingsCatalog } from '../lib/settings-catalog'
+import { SettingsDraftBoundary } from '../lib/settings-draft'
+import { NodeSettingsCard, ModeCard, CoresCard, type NodeSettingsSection } from '../components/settings/SettingsCards'
+import { OverridesCard } from '../components/OverridesCard'
+import { BackupCard } from '../components/BackupCard'
+import { UpdateCard } from '../components/UpdateCard'
+import { useAuth } from '../lib/auth'
+import { api } from '../lib/api'
+
+function Editor({ id }: { id: string }) {
+  const { me } = useAuth()
+  if (id === 'komari') return <KomariCard readOnly={!!me?.fixed || me?.mode === 'managed'} />
+  if (id === 'dstatus') return <DStatusCard readOnly={!!me?.fixed || me?.mode === 'managed'} />
+  if (id === 'mode') return <ModeCard />
+  if (id === 'cores') return <CoresCard />
+  if (id === 'backup') return <BackupCard />
+  if (id === 'update') return <UpdateCard />
+  if (id === 'overrides') return <OverridesCard queryKey={['overrides']} load={() => api.get<Record<string, string>>('/api/overrides')} save={v => api.put('/api/overrides', v)} readOnly={!!me?.fixed || me?.mode === 'managed'} />
+  return <NodeSettingsCard section={id as NodeSettingsSection} />
+}
 
 export default function SettingsPage() {
   const { t } = useTranslation()
-  const { me, refresh } = useAuth()
-  const qc = useQueryClient()
-  const settings = useQuery({ queryKey: ['settings'], queryFn: () => api.get<Settings>('/api/settings') })
-  const status = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
-  const cores = useQuery({ queryKey: ['cores'], queryFn: () => api.get<CoreRelease[]>('/api/cores') })
-  const sform = useForm<Settings>({ initialValues: { public_host: '', node_name: '', acme_email: '', cloudflare_token: '', panel_domain: '', panel_acme: 'http', decoy_enabled: false, decoy_domain: '', decoy_upstream: '', decoy_acme: 'http', decoy_allow_private: false, decoy_insecure: false, user_speed_limit_mbps: 0, mita_quotas: false, panel_allow_cidrs: [], extra_links: '', telegram_token: '', telegram_chat_id: 0, telegram_notify: true } })
-  useEffect(() => { if (settings.data) sform.setValues(settings.data) }, [settings.data]) // eslint-disable-line react-hooks/exhaustive-deps
-  const saveSettings = useMutation({ mutationFn: (v: Settings) => api.put<{ ok: boolean; dns?: DNSResult[] }>('/api/settings', v), onSuccess: (r) => { toast.ok(t('common.saved')); dnsToast(r.dns); qc.invalidateQueries({ queryKey: ['settings'] }); qc.invalidateQueries({ queryKey: ['links'] }) }, onError: toast.err })
-  const aform = useForm({ initialValues: { Username: me?.username ?? 'admin', Password: '', Confirm: '' }, validate: { Confirm: (v, all) => (v === all.Password ? null : t('settings.mismatch')) } })
-  const saveAdmin = useMutation({ mutationFn: (v: { Username: string; Password: string }) => api.put('/api/admin', v), onSuccess: () => { toast.ok(t('common.saved')); aform.setValues({ Password: '', Confirm: '' }); refresh() }, onError: toast.err })
-  const mform = useForm({ initialValues: { url: '', pair_code: '' } })
-  const adopt = useMutation({ mutationFn: (v: { url: string; pair_code: string }) => api.post('/api/mode/adopt', v), onSuccess: () => { toast.ok(t('mode.adopted')); refresh(); qc.invalidateQueries() }, onError: toast.err })
-  const [keep, setKeep] = useState(false)
-  const detach = useMutation({ mutationFn: () => api.post('/api/mode/detach', { keep }), onSuccess: () => { toast.ok(t('mode.detached')); refresh(); qc.invalidateQueries() }, onError: toast.err })
-  const s = status.data
-  const fixed = !!me?.fixed
-  return (
-    <>
-      <PageHeader title={t('settings.title')} subtitle={t('settings.subtitle')} />
-      <SimpleGrid cols={{ base: 1, md: 2 }} mb="lg">
-        <Card>
-          <Title order={5} mb="xs">{t('settings.node')}</Title>
-          <form onSubmit={sform.onSubmit((v) => saveSettings.mutate(v))}><Stack gap="sm">
-            <TextInput label={t('settings.publicHost')} description={t('settings.publicHostHint')} placeholder="node.example.com" {...sform.getInputProps('public_host')} />
-            <TextInput label={t('settings.nodeName')} description={t('settings.nodeNameHint')} placeholder="JP-1" {...sform.getInputProps('node_name')} />
-            <Title order={6} mt="xs">{t('settings.certs')}</Title>
-            <Text size="xs" c="dimmed">{t('settings.certsHint')}</Text>
-            <TextInput label={t('settings.acmeEmail')} placeholder="you@example.com" {...sform.getInputProps('acme_email')} />
-            <PasswordInput label={t('settings.cfToken')} description={settings.data?.has_cloudflare_token ? t('settings.tokenKeptHint') : t('settings.cfTokenHint')} placeholder={settings.data?.has_cloudflare_token ? '••••••••' : ''} {...sform.getInputProps('cloudflare_token')} />
-            <Group grow align="flex-end">
-              <TextInput label={t('settings.panelDomain')} description={t('settings.panelDomainHint')} placeholder="node.example.com" {...sform.getInputProps('panel_domain')} />
-              <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('panel_acme')} />
-            </Group>
-            <Title order={6} mt="xs">{t('settings.decoy')}</Title>
-            <Text size="xs" c="dimmed">{t('settings.decoyHint')}</Text>
-            <Switch label={t('settings.decoyEnabled')} {...sform.getInputProps('decoy_enabled', { type: 'checkbox' })} />
-            {sform.values.decoy_enabled && (
-              <>
-                <Group grow align="flex-start">
-                  <TextInput label={t('settings.decoyDomain')} description={t('settings.decoyDomainHint')} placeholder="www.example.com" required {...sform.getInputProps('decoy_domain')} />
-                  <Select label={t('inbounds.acme')} data={[{ value: 'http', label: t('inbounds.acmeHttp') }, { value: 'dns', label: t('inbounds.acmeDns') }]} allowDeselect={false} {...sform.getInputProps('decoy_acme')} />
-                </Group>
-                <TextInput label={t('settings.decoyUpstream')} description={t('settings.decoyUpstreamHint')} placeholder="https://www.example.com" {...sform.getInputProps('decoy_upstream')} />
-                {sform.values.decoy_upstream && <Group grow>
-                  <Switch label={t('settings.decoyAllowPrivate')} description={t('settings.decoyAllowPrivateHint')} {...sform.getInputProps('decoy_allow_private', { type: 'checkbox' })} />
-                  <Switch label={t('settings.decoyInsecure')} description={t('settings.decoyInsecureHint')} {...sform.getInputProps('decoy_insecure', { type: 'checkbox' })} />
-                </Group>}
-                {s?.agent?.decoy && <Text size="xs" c={s.agent.decoy.error ? 'red' : s.agent.decoy.cert_ready ? 'teal' : 'orange'}>{s.agent.decoy.error ? s.agent.decoy.error : s.agent.decoy.cert_ready ? t('settings.decoyReady', { port: s.agent.decoy.port }) : t('settings.decoyPending')}</Text>}
-              </>
-            )}
-            <NumberInput label={t('settings.speedLimit')} description={t('settings.speedLimitHint')} min={0} {...sform.getInputProps('user_speed_limit_mbps')} />
-            <Switch label={t('settings.mitaQuotas')} description={t('settings.mitaQuotasHint')} {...sform.getInputProps('mita_quotas', { type: 'checkbox' })} />
-            {s?.agent?.shaper && <Text size="xs" c={s.agent.shaper.error ? 'red' : s.agent.shaper.supported ? 'teal' : 'orange'}>{s.agent.shaper.error ? s.agent.shaper.error : s.agent.shaper.supported ? t('settings.shaperOn', { n: s.agent.shaper.users, iface: s.agent.shaper.interface }) : t('settings.shaperUnsupported')}</Text>}
-            <Title order={6} mt="xs">{t('settings.access')}</Title>
-            <TagsInput label={t('settings.allowCidrs')} description={t('settings.allowCidrsHint')} placeholder="203.0.113.0/24" value={sform.values.panel_allow_cidrs ?? []} onChange={(v) => sform.setFieldValue('panel_allow_cidrs', v)} />
-            <Textarea label={t('settings.extraLinks')} description={t('settings.extraLinksHint')} autosize minRows={2} placeholder="vless://… (one per line)" {...sform.getInputProps('extra_links')} />
-            <Title order={6} mt="xs">{t('settings.telegram')}</Title>
-            <Text size="xs" c="dimmed">{t('settings.telegramHint')}</Text>
-            <Group grow align="flex-start">
-              <PasswordInput label={t('settings.telegramToken')} description={settings.data?.has_telegram_token ? t('settings.tokenKeptHint') : undefined} placeholder={settings.data?.has_telegram_token ? '••••••••' : '123456:ABC…'} {...sform.getInputProps('telegram_token')} />
-              <NumberInput label={t('settings.telegramChat')} description={t('settings.telegramChatHint')} hideControls value={sform.values.telegram_chat_id || ''} onChange={(v) => sform.setFieldValue('telegram_chat_id', Number(v) || 0)} />
-            </Group>
-            <Switch label={t('settings.telegramNotify')} {...sform.getInputProps('telegram_notify', { type: 'checkbox' })} />
-            <Group justify="flex-end"><Button type="submit" size="xs" loading={saveSettings.isPending}>{t('common.save')}</Button></Group>
-          </Stack></form>
-        </Card>
-        <Card>
-          <Title order={5} mb="xs">{t('settings.login')}</Title>
-          <form onSubmit={aform.onSubmit((v) => saveAdmin.mutate({ Username: v.Username, Password: v.Password }))}><Stack gap="sm">
-            <TextInput label={t('login.username')} required {...aform.getInputProps('Username')} />
-            <Group grow>
-              <PasswordInput label={t('settings.newPassword')} description={t('settings.newPasswordHint')} {...aform.getInputProps('Password')} />
-              <PasswordInput label={t('settings.confirm')} {...aform.getInputProps('Confirm')} />
-            </Group>
-            <Group justify="flex-end"><Button type="submit" size="xs" loading={saveAdmin.isPending}>{t('common.save')}</Button></Group>
-          </Stack></form>
-        </Card>
-      </SimpleGrid>
-
-      <Card mb="lg">
-        <Group justify="space-between" mb="xs">
-          <Title order={5}>{t('mode.title')}</Title>
-          {s && <Badge color={fixed ? 'grape' : s.mode === 'managed' ? 'orange' : 'teal'}>{fixed ? t('mode.fixed', { driver: me?.fixed }) : t(`mode.${s.mode}`)}</Badge>}
-        </Group>
-        {fixed && <Text size="sm" c="dimmed">{t('mode.fixedHint', { driver: me?.fixed })}</Text>}
-        {!fixed && s?.mode === 'local' && (
-          <Stack gap="sm">
-            <Text size="sm" c="dimmed">{t('mode.adoptHint')}</Text>
-            <form onSubmit={mform.onSubmit((v) => { modals.openConfirmModal({ title: t('mode.adopt'), children: <Text size="sm">{t('mode.adoptConfirm')}</Text>, labels: { confirm: t('mode.adopt'), cancel: t('common.cancel') }, confirmProps: { color: 'orange' }, onConfirm: () => adopt.mutate(v) }) })}>
-              <Group align="flex-end">
-                <TextInput flex={2} label={t('mode.captainUrl')} placeholder="https://panel.example.com" required {...mform.getInputProps('url')} />
-                <TextInput flex={1} label={t('mode.pairCode')} placeholder="ABCD-EFGH" required {...mform.getInputProps('pair_code')} />
-                <Button type="submit" color="orange" loading={adopt.isPending}>{t('mode.adopt')}</Button>
-              </Group>
-            </form>
-          </Stack>
-        )}
-        {!fixed && s?.mode === 'managed' && (
-          <Stack gap="sm">
-            <Alert color="orange">{t('mode.managedHint')}</Alert>
-            <Text size="sm">{t('mode.managedBy')} <b>{s.managed?.url}</b> · {t('mode.since')} {when(s.managed?.paired_at)}</Text>
-            <Switch label={t('mode.keep')} description={t('mode.keepHint')} checked={keep} onChange={(e) => setKeep(e.currentTarget.checked)} />
-            {!keep && <Text size="xs" c="dimmed">{s.has_snapshot ? t('mode.restoreHint') : t('mode.emptyHint')}</Text>}
-            <Group><Button color="red" variant="light" loading={detach.isPending} onClick={() => modals.openConfirmModal({ title: t('mode.detach'), children: <Text size="sm">{t('mode.detachConfirm')}</Text>, labels: { confirm: t('mode.detach'), cancel: t('common.cancel') }, confirmProps: { color: 'red' }, onConfirm: () => detach.mutate() })}>{t('mode.detach')}</Button></Group>
-          </Stack>
-        )}
-      </Card>
-
-      <SimpleGrid cols={{ base: 1, md: 2 }} mb="lg">
-        <TwoFactorCard />
-        <TokensCard />
-      </SimpleGrid>
-      <Card mb="lg" p={0} withBorder={false} bg="transparent"><OverridesCard queryKey={['overrides']} load={() => api.get<Record<string, string>>('/api/overrides')} save={(v) => api.put('/api/overrides', v)} readOnly={fixed || s?.mode === 'managed'} /></Card>
-      <BackupCard />
-      <UpdateCard mb="lg" />
-
-      <Card>
-        <Title order={5} mb="xs">{t('settings.cores')}</Title>
-        <Text size="xs" c="dimmed" mb="sm">{t('settings.coresHint')}</Text>
-        <Table>
-          <Table.Thead><Table.Tr><Table.Th>{t('inbounds.core')}</Table.Th><Table.Th>{t('settings.version')}</Table.Th><Table.Th>{t('settings.status')}</Table.Th><Table.Th>{t('settings.note')}</Table.Th></Table.Tr></Table.Thead>
-          <Table.Tbody>
-            {(cores.data ?? []).map((r) => (
-              <Table.Tr key={r.Core + r.Version}>
-                <Table.Td><Text size="sm" fw={600}>{r.Core}</Text></Table.Td>
-                <Table.Td><Text size="sm" ff="monospace">{r.Version}</Text>{r.Installed && <Badge ml={6} size="xs" color="teal">{t('settings.installed')}</Badge>}</Table.Td>
-                <Table.Td><Badge color={r.Status === 'tested' ? 'teal' : r.Status === 'broken' ? 'red' : 'yellow'}>{r.Status}</Badge></Table.Td>
-                <Table.Td><Text size="xs" c="dimmed">{r.Note}</Text></Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Card>
-    </>
-  )
+  const { me } = useAuth()
+  const id = useParams()['*'] ?? ''
+  const [searchState, setSearchState] = useState({ scope: id, value: '' })
+  const search = searchState.scope === id ? searchState.value : ''
+  const setSearch = (value: string) => setSearchState({ scope: id, value })
+  const entry = settingsCatalog.find(e => e.id === id)
+  const area = id.startsWith('area/') ? id.slice(5) : undefined
+  if (id && !entry && !settingsAreas.some(value => value === area)) return <Stack><Alert color="yellow">{t('workspace.notFound')}</Alert><Anchor component={Link} to="/settings">{t('nav.settings')}</Anchor></Stack>
+  if (entry) return <Box maw={1000} mx="auto">
+    <Button component={Link} to={`/settings/area/${entry.area}`} variant="subtle" leftSection={<IconArrowLeft size={16} />} mb="sm">{t(`workspace.areas.${entry.area}`)}</Button>
+    <PageHeader title={t(entry.titleKey)} subtitle={t(entry.hintKey)} />
+    {(me?.fixed || me?.mode === 'managed') && <Alert mb="md">{t('workspace.managedHint')}</Alert>}
+    <SettingsDraftBoundary key={entry.id}><Editor id={entry.id} /></SettingsDraftBoundary>
+  </Box>
+  const term = search.trim().toLocaleLowerCase()
+  const entries = settingsCatalog.filter(e => (!area || e.area === area) && `${t(e.titleKey)} ${t(e.hintKey)} ${e.keywords}`.toLocaleLowerCase().includes(term))
+  return <Box maw={1000} mx="auto"><PageHeader title={area ? t(`workspace.areas.${area}`) : t('nav.settings')} subtitle={t('workspace.settingsHint')} /><Stack>
+    <TextInput aria-label={t('workspace.search')} placeholder={t('workspace.search')} leftSection={<IconSearch size={17} />} value={search} onChange={e => setSearch(e.currentTarget.value)} />
+    <Anchor component={Link} to="/account" size="sm">{t('workspace.account')}</Anchor>
+    {!area && !term && <SimpleGrid cols={{ base: 1, sm: 2 }}>{settingsAreas.map(group => <Card component={Link} to={`/settings/area/${group}`} key={group} style={{ textDecoration: 'none', color: 'inherit' }}><Group justify="space-between" wrap="nowrap"><Text fw={600}>{t(`workspace.areas.${group}`)}</Text><IconArrowRight size={17} style={{ flexShrink: 0 }} /></Group><Text size="sm" c="dimmed" mt="xs">{settingsCatalog.filter(e => e.area === group).map(e => t(e.titleKey)).join(' · ')}</Text></Card>)}</SimpleGrid>}
+    <SimpleGrid cols={{ base: 1, sm: 2 }}>{(area || term ? entries : []).map(e => <Card component={Link} to={`/settings/${e.id}`} key={e.id} style={{ textDecoration: 'none', color: 'inherit' }}><Group justify="space-between" wrap="nowrap"><Text fw={600}>{t(e.titleKey)}</Text><IconArrowRight size={17} style={{ flexShrink: 0 }} /></Group><Text size="sm" c="dimmed" mt="xs" lineClamp={2}>{t(e.hintKey)}</Text></Card>)}</SimpleGrid>
+    {area && <Anchor component={Link} to="/settings" size="sm">{t('workspace.allSettings')}</Anchor>}
+    {!entries.length && <Text c="dimmed">{t('workspace.noResults')}</Text>}
+  </Stack></Box>
 }

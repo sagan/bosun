@@ -465,9 +465,6 @@
     "roundRobinShort": "轮询"
   },
   "settings": {
-    "title": "设置",
-    "subtitle": "节点信息、登录和运行模式。",
-    "node": "节点",
     "publicHost": "对外地址",
     "publicHostHint": "分享链接里的服务器地址，留空用访问面板的地址。",
     "nodeName": "节点名",
@@ -923,5 +920,42 @@
     "noChanges": "配置项没有差异，入站服务器密钥仍会重新生成。",
     "load": "载入编辑器",
     "stale": "草稿已改变，请重新预览。"
+  },
+  "workspace": {
+    "search": "搜索设置…",
+    "settingsHint": "选择分类，或搜索需要的设置。",
+    "unsaved": "有未保存的修改",
+    "leaveHint": "请先保存修改，或放弃修改后离开。",
+    "stay": "继续编辑",
+    "discard": "放弃并离开",
+    "notFound": "这个设置页面不存在。",
+    "noResults": "没有匹配的设置，请换个关键词。",
+    "allSettings": "设置目录",
+    "updateHint": "查看当前版本和可用更新。",
+    "node": "节点信息",
+    "nodeHint": "设置节点名称和公开地址。",
+    "modeHint": "查看驱动与配对状态，在允许时切换运行模式。",
+    "network": "网络与访问",
+    "networkHint": "管理证书、面板访问与伪装站。",
+    "runtime": "流量策略",
+    "runtimeHint": "设置默认限速与 Mieru 配额。",
+    "overrides": "高级覆写",
+    "overridesHint": "在允许本地编辑时覆写内核配置。",
+    "account": "我的账号",
+    "accountHint": "管理登录凭据、二步验证和 API 令牌。",
+    "managedHint": "业务配置以托管面板或配置文件为准。本机访问设置独立管理，受保护的覆写只读。",
+    "services": "服务",
+    "monitoring": "监控诊断",
+    "loadError": "设置加载失败，请重试后再编辑。",
+    "retry": "重试",
+    "areas": {
+      "node": "节点与接入",
+      "network": "网络与访问",
+      "runtime": "运行策略",
+      "subscription": "订阅输出",
+      "integrations": "通知与集成",
+      "maintenance": "备份与维护"
+    },
+    "navigation": "导航菜单"
   }
 }

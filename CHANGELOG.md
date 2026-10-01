@@ -4,7 +4,11 @@ One entry per release tag, newest first, condensed from the commit subjects
 between that tag and the previous one (`git log --format=%s <prev>..<tag>`).
 Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
-from there (Settings → Version and updates, or from Captain's node list).
+from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
+
+- **v0.58.0** (2026-10-01) — Group the standalone console into Overview, Services, Users, and Monitoring and diagnostics. Replace the long settings page with six searchable categories and 12 separately addressable editors; move administrator credentials, TOTP and tokens to My account, and external monitoring integrations to settings.
+  - Preserve drafts during background refresh, confirm navigation with unsaved changes, and show retryable initial-load errors before enabling a form. Before whole-document settings saves, read the current configuration and overlay only changed fields from the current section, preserving other sections and blank write-only secrets. Existing managed/fixed-driver restrictions remain enforced.
+  - Align responsive forms, update all six languages, and validate translation keys referenced through navigation metadata. The single-administrator model, node protocol, configuration keys and core behavior are unchanged.
 
 - **v0.57.0** (2026-09-30) — Persist immutable Captain traffic batches before delivery, retry unchanged after lost responses/restarts, and separate reporting generations with additive traffic epochs. Keep new counters in cores while a frozen batch awaits acknowledgement. Private journals fail closed on corruption; upstream counter-reset/fsync and uncollected-core-counter crash windows remain documented.
   - Add bounded Linux exit diagnostics with IPv4/IPv6, ASN/region, reputation and optional AI/streaming checks, a structured report and JSON export in standalone/Captain. Rebuild MIT GeoCheck v0.3.0 as separate static Go 1.26.8 release artifacts; first use verifies a fixed release checksum and installs into a private tool directory. No raw shell/flags or inherited proxy credentials.

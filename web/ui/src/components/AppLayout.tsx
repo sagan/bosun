@@ -1,33 +1,17 @@
-import { ActionIcon, AppShell, Avatar, Badge, Box, Burger, Divider, Group, Indicator, Menu, NavLink, ScrollArea, Stack, Text, ThemeIcon, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core'
+import { ActionIcon, AppShell, Avatar, Badge, Box, Burger, Group, Indicator, Menu, NavLink, ScrollArea, Text, ThemeIcon, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconFileText, IconRoute, IconCertificate, IconActivity, IconStethoscope, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown, IconFileCode } from '@tabler/icons-react'
+import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconActivity, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown } from '@tabler/icons-react'
 import { languages } from '../i18n'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../lib/auth'
 import { useQuery } from '@tanstack/react-query'
 import { api, type UpdateInfo } from '../lib/api'
 import { pageBackground } from '../theme'
+import { navigation, navigationGroup } from '../lib/navigation'
+import { GroupedNavigation } from './GroupedNavigation'
 
-// Sidebar groups, separated by hairlines like a hosting console.
-const groups = [
-  [{ to: '/', key: 'overview', icon: IconLayoutDashboard }],
-  [
-    { to: '/inbounds', key: 'inbounds', icon: IconPlugConnected },
-    { to: '/forwards', key: 'outbound', icon: IconRoute },
-    { to: '/users', key: 'users', icon: IconUsers },
-    { to: '/templates', key: 'templates', icon: IconFileCode },
-    { to: '/certificates', key: 'certificates', icon: IconCertificate },
-  ],
-  [
-    { to: '/probe', key: 'probe', icon: IconActivity },
-    { to: '/doctor', key: 'doctor', icon: IconStethoscope },
-  ],
-  [
-    { to: '/settings', key: 'settings', icon: IconSettings },
-    { to: '/logs', key: 'logs', icon: IconFileText },
-  ],
-]
+const icons = { overview: IconLayoutDashboard, services: IconPlugConnected, users: IconUsers, monitoring: IconActivity }
 
 export function ModeBadge({ mode, fixed }: { mode: string; fixed?: string }) {
   const { t } = useTranslation()
@@ -53,7 +37,7 @@ export function AppLayout() {
   const nav = useNavigate()
   const loc = useLocation()
   const { colorScheme, setColorScheme } = useMantineColorScheme()
-  const active = (to: string) => (to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(to))
+  const group = navigationGroup(loc.pathname)
   const upd = useQuery({ queryKey: ['update'], queryFn: () => api.get<UpdateInfo>('/api/update'), staleTime: 10 * 60_000, refetchInterval: 30 * 60_000, retry: false })
   const lang = languages.find((l) => l.code === i18n.language) ?? languages[0]
   const dark = colorScheme === 'dark'
@@ -63,14 +47,14 @@ export function AppLayout() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="sm" wrap="nowrap">
-            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
+            <Burger aria-label={t('workspace.navigation')} opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
             <UnstyledButton onClick={() => { nav('/'); close() }}><Brand name="bosun" /></UnstyledButton>
           </Group>
           <Group gap="xs" wrap="nowrap" align="center">
             {me && <ModeBadge mode={me.mode} fixed={me.fixed} />}
             {me?.version && (
               <Indicator disabled={!upd.data?.has_update} color="red" size={8} offset={2} processing styles={{ root: { display: 'flex' } }}>
-                <Badge variant="light" color="gray" style={{ cursor: 'pointer' }} onClick={() => nav('/settings')} title={upd.data?.has_update ? t('update.available', { version: upd.data.latest }) : undefined}>{me.version}</Badge>
+                <Badge variant="light" color="gray" style={{ cursor: 'pointer' }} onClick={() => nav('/settings/update')} title={upd.data?.has_update ? t('update.available', { version: upd.data.latest }) : undefined}>{me.version}</Badge>
               </Indicator>
             )}
           </Group>
@@ -79,20 +63,10 @@ export function AppLayout() {
 
       <AppShell.Navbar>
         <AppShell.Section grow component={ScrollArea} type="auto" scrollbarSize={6} px="sm" py="sm">
-          <Stack gap={0}>
-            {groups.map((g, i) => (
-              <Box key={i}>
-                {i > 0 && <Divider my="xs" />}
-                {g.map((it) => (
-                  <NavLink key={it.to} component={UnstyledButton} label={t(`nav.${it.key}`)} leftSection={<it.icon size={18} stroke={1.7} />}
-                    variant="light" active={active(it.to)} onClick={(e) => { e.currentTarget.blur(); nav(it.to); close() }}
-                    styles={{ root: { borderRadius: 8, marginBottom: 2 }, label: { fontWeight: 500 } }} />
-                ))}
-              </Box>
-            ))}
-          </Stack>
+          <GroupedNavigation groups={navigation} icons={icons} activeGroup={group} onNavigate={close} />
         </AppShell.Section>
         <AppShell.Section p="sm" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+          <NavLink component={Link} to="/settings" label={t('nav.settings')} leftSection={<IconSettings size={18} />} active={group === 'system'} onClick={close} mb="sm" styles={{ root: { borderRadius: 8 } }} />
           <Group justify="space-between" mb="sm" px={4}>
             <Menu shadow="md" width={160}>
               <Menu.Target>
@@ -115,7 +89,7 @@ export function AppLayout() {
             <Menu shadow="md" position="top-end">
               <Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="account menu"><IconDotsVertical size={18} /></ActionIcon></Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item leftSection={<IconSettings size={16} />} onClick={() => { nav('/settings'); close() }}>{t('nav.settings')}</Menu.Item>
+                <Menu.Item leftSection={<IconSettings size={16} />} onClick={() => { nav('/account'); close() }}>{t('workspace.account')}</Menu.Item>
                 <Menu.Item leftSection={<IconLogout size={16} />} color="red" onClick={async () => { await logout(); nav('/login') }}>{t('common.logout')}</Menu.Item>
               </Menu.Dropdown>
             </Menu>

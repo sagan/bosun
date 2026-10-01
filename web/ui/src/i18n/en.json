@@ -465,9 +465,6 @@
     "roundRobinShort": "round-robin"
   },
   "settings": {
-    "title": "Settings",
-    "subtitle": "Node identity, login and mode.",
-    "node": "Node",
     "publicHost": "Public address",
     "publicHostHint": "Server address in share links; blank uses the address this panel was opened on.",
     "nodeName": "Node name",
@@ -923,5 +920,42 @@
     "noChanges": "No settings changed. Inbound server keys will still be regenerated.",
     "load": "Load into editor",
     "stale": "The draft changed. Preview again before loading."
+  },
+  "workspace": {
+    "search": "Search settings…",
+    "settingsHint": "Choose a category, or search for a setting.",
+    "unsaved": "Unsaved changes",
+    "leaveHint": "Save your changes before leaving, or discard them to continue.",
+    "stay": "Keep editing",
+    "discard": "Discard and leave",
+    "notFound": "This settings page does not exist.",
+    "noResults": "No matching settings. Try another keyword.",
+    "allSettings": "Settings directory",
+    "updateHint": "View the current version and available updates.",
+    "node": "Node identity",
+    "nodeHint": "Set the node name and public address.",
+    "modeHint": "View the driver and pairing status, and switch modes when supported.",
+    "network": "Network and access",
+    "networkHint": "Manage certificates, panel access and the decoy site.",
+    "runtime": "Traffic policies",
+    "runtimeHint": "Set default speed limits and Mieru quotas.",
+    "overrides": "Advanced overrides",
+    "overridesHint": "Override core configuration where local editing is allowed.",
+    "account": "My account",
+    "accountHint": "Manage your login credentials, two-factor authentication and API tokens.",
+    "managedHint": "Service configuration comes from the managing panel or configuration file. Local access settings remain separate; protected overrides are read-only.",
+    "services": "Services",
+    "monitoring": "Monitoring and diagnostics",
+    "loadError": "Could not load settings. Try again before editing.",
+    "retry": "Try again",
+    "areas": {
+      "node": "Node and pairing",
+      "network": "Network and access",
+      "runtime": "Traffic policies",
+      "subscription": "Subscription output",
+      "integrations": "Notifications and integrations",
+      "maintenance": "Backups and maintenance"
+    },
+    "navigation": "Navigation menu"
   }
 }

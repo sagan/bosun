@@ -11,6 +11,8 @@ Verified end to end against the manifest's tested releases (sing-box
 1.14.1, Xray 26.3.27, mita 3.37.0, Hysteria 2.12.3; see the table under
 "Run"):
 
+- Grouped standalone navigation, searchable settings pages, protected drafts and responsive forms in six languages, with credentials and tokens under My account. [Console navigation](#console-navigation).
+
 - Durable Captain reporting journals, structured Linux exit diagnostics with a separately rebuilt MIT GeoCheck tool, and named typed inbound/outbound/route presets with change previews. [Operation and failure boundaries](docs/DIAGNOSTICS_AND_PRESETS.md).
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
@@ -313,7 +315,7 @@ repeat an unexpired task before its result reaches Captain. Captain stores up to
 
 ## Komari reporting
 
-Probe → Komari reporting turns the node into a Komari agent: with the
+Settings → Notifications and integrations → Komari reporting turns the node into a Komari agent: with the
 server URL and the auto-discovery key (Komari → Settings → General) it
 registers once (`POST /api/clients/register`, client named `Auto-<name>`),
 keeps the token in `<data_dir>/komari.json`, then posts `agent.basicInfo`
@@ -352,7 +354,7 @@ passive endpoint is up but has never been read (a firewall, or the wrong
 address in the panel), when scrapes are refused for a wrong key, and in
 active mode when the panel stops accepting reports — with the panel's own
 reason. Captain pushes the setting to every managed node (`state.dstatus`,
-the SID per node); standalone keeps it in the local store (Probe page).
+the SID per node); standalone keeps it in the local store (Settings → Notifications and integrations → DStatus).
 
 Per-core CPU percentages and per-interface counters come back empty —
 bosun does not measure them, and an empty list reads better in the panel
@@ -389,7 +391,7 @@ and the local `certs:` config. They are reported with method `custom`.
 
 ## Updating
 
-Settings → "Version and updates" checks GitHub Releases (cached 20 minutes; a
+Settings → Backups and maintenance → "Version and updates" checks GitHub Releases (cached 20 minutes; a
 red dot on the version badge means a newer release exists). "Update and
 restart" downloads `bosun-linux-<arch>` for the running platform, verifies it
 against the release's `SHA256SUMS`, swaps the binary atomically (the previous
@@ -403,6 +405,25 @@ bosun puts `bosun.backup` back, reports the version and restarts.
 Inside Docker the binary is part of the image, so the panel only shows the
 `docker compose pull && docker compose up -d` command instead. `bosun` also logs
 a notice every six hours when a newer release exists.
+
+## Console navigation
+
+The standalone console groups its pages into Overview, Services, Users and
+Monitoring and diagnostics. Settings stays at the bottom of the sidebar, with
+categories for node identity and pairing, network access, traffic policies,
+subscription output, notifications and integrations, and maintenance. Each
+editor has its own URL, such as `/settings/network`; directory search uses only
+navigation metadata. My account, in the avatar menu, contains the administrator
+login name/password, TOTP and personal API tokens.
+
+Only the selected settings editor loads its data and polls its status. Unsaved
+changes are protected when navigating away, and status refreshes do not replace
+an edited form. Settings still use the existing whole-document API: before
+saving, the console reads the current document and overlays only changed fields
+from the current section. Blank write-only secrets retain their existing values.
+This preserves other sections but is not a server-side concurrency lock.
+Managed and fixed-driver restrictions still come from the same backend; moving
+an editor does not make a protected operation locally editable.
 
 ## Standalone vs managed
 
@@ -421,7 +442,7 @@ change user IDs in Captain instead.
 Standalone accounts are separate objects in `local.json`, not SQL tables:
 `admin` is the single console login and `users` contains subscribers. The
 administrator has no numeric ID and does not consume user numbers. Its
-username can be changed under Settings without creating a subscriber.
+username can be changed under My account without creating a subscriber.
 
 The standalone panel carries the same node-side features as Captain's node
 page: line ingresses (IPLC / dedicated NICs: inbounds bind to the line
@@ -440,7 +461,7 @@ random port); `--yes` skips the questions, `--user`, `--password` and
 `--web-listen` answer them up front. `bosun admin set -user U -password P`
 changes the login later; `bosun admin reset-password` generates a new one.
 
-Settings → Mode → "Hand over to Captain" takes a pair code, snapshots the local
+Settings → Node and pairing → Mode → "Hand over to Captain" takes a pair code, snapshots the local
 objects, and restarts the agent on the Captain driver; the panel turns read-only.
 "Detach" comes back to local mode, restoring the snapshot or keeping the last
 state the panel pushed. `bosun admin reset-password` recovers a lost login.
@@ -469,7 +490,7 @@ process does not run the cores, the core check is skipped there.
 
 ### Backup and restore (standalone)
 
-Settings → Backup downloads `bosun-backup-<date>.tar.gz` with `local.json`,
+Settings → Backups and maintenance → Backup downloads `bosun-backup-<date>.tar.gz` with `local.json`,
 its traffic history, the Komari registration and operator certificates
 (`certs/custom`); ACME storage and panel TLS files are not included and are
 obtained again. Restore (`POST /api/backup/restore`, local mode only)

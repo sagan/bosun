@@ -1,6 +1,7 @@
 import { Button, Card, Group, JsonInput, SimpleGrid, Text, Title } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSettingsDirty } from '../lib/settings-draft'
 import { useTranslation } from 'react-i18next'
 import { toast } from '../lib/notify'
 
@@ -14,19 +15,20 @@ export function OverridesCard({ queryKey, load, save, readOnly }: { queryKey: un
   const { t } = useTranslation()
   const qc = useQueryClient()
   const q = useQuery({ queryKey, queryFn: load })
-  const [v, setV] = useState<Record<string, string>>({})
-  useEffect(() => { if (q.data) setV({ ...q.data }) }, [q.data])
-  const mut = useMutation({ mutationFn: () => save(v), onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey }) }, onError: toast.err })
+  const [draft, setDraft] = useState<Record<string, string> | null>(null)
+  const v = draft ?? q.data ?? {}
+  useSettingsDirty(!readOnly && draft !== null)
+  const mut = useMutation({ mutationFn: () => save(v), onSuccess: () => { setDraft(null); toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey }) }, onError: toast.err })
   return (
     <Card>
       <Title order={5} mb={4}>{t('overrides.title')}</Title>
       <Text size="xs" c="dimmed" mb="sm">{t('overrides.hint')}</Text>
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
         {cores.map((c) => (
-          <JsonInput key={c} label={labels[c]} placeholder={'{ }'} autosize minRows={3} maxRows={12} formatOnBlur validationError={t('overrides.invalid')} disabled={readOnly} value={v[c] ?? ''} onChange={(x) => setV((cur) => ({ ...cur, [c]: x }))} />
+          <JsonInput key={c} label={labels[c]} placeholder={'{ }'} autosize minRows={3} maxRows={12} formatOnBlur validationError={t('overrides.invalid')} disabled={readOnly || !q.data} value={v[c] ?? ''} onChange={(x) => setDraft({ ...v, [c]: x })} />
         ))}
       </SimpleGrid>
-      {!readOnly && <Group justify="flex-end" mt="sm"><Button size="xs" loading={mut.isPending} onClick={() => mut.mutate()}>{t('common.save')}</Button></Group>}
+      {!readOnly && <Group justify="flex-end" mt="sm"><Button size="xs" loading={mut.isPending} disabled={!q.data || draft === null} onClick={() => mut.mutate()}>{t('common.save')}</Button></Group>}
     </Card>
   )
 }

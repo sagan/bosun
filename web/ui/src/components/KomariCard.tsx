@@ -1,5 +1,7 @@
+import { SettingsFields } from './SettingsFields'
 import { Badge, Button, Card, Group, NumberInput, PasswordInput, Stack, Switch, Text, TextInput, Title } from '@mantine/core'
-import { useForm } from '@mantine/form'
+import { useSettingsForm as useForm } from '../lib/settings-draft'
+import { SettingsLoadState } from './SettingsLoadState'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -18,9 +20,10 @@ export function KomariCard({ readOnly }: { readOnly?: boolean }) {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['komari'], queryFn: () => api.get<KomariInfo>('/api/komari'), refetchInterval: 10_000 })
   const form = useForm<KomariSettings>({ initialValues: { enabled: false, server: '', key: '', name: '', interval: 3 } })
-  useEffect(() => { if (q.data) form.setValues({ ...q.data.settings, key: '', interval: q.data.settings.interval || 3 }) }, [q.data]) // eslint-disable-line react-hooks/exhaustive-deps
-  const save = useMutation({ mutationFn: (v: KomariSettings) => api.put('/api/komari', v), onSuccess: () => { toast.ok(t('common.saved')); form.setFieldValue('key', ''); qc.invalidateQueries({ queryKey: ['komari'] }) }, onError: toast.err })
+  useEffect(() => { if (q.data) form.hydrate({ ...q.data.settings, key: '', interval: q.data.settings.interval || 3 }) }, [q.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  const save = useMutation({ mutationFn: (v: KomariSettings) => api.put('/api/komari', v), onSuccess: () => { toast.ok(t('common.saved')); form.resetDirty(); form.hydrate({ ...form.getValues(), key: '' }); qc.invalidateQueries({ queryKey: ['komari'] }) }, onError: toast.err })
   const st = q.data?.status
+  if (q.data === undefined) return <SettingsLoadState query={q} />
   return (
     <Card mb="lg">
       <Group justify="space-between" mb="xs">
@@ -29,15 +32,15 @@ export function KomariCard({ readOnly }: { readOnly?: boolean }) {
       </Group>
       <Text size="xs" c="dimmed" mb="sm">{t('komari.hint')}</Text>
       <form onSubmit={form.onSubmit((v) => save.mutate(v))}><Stack gap="sm">
-        <Group grow align="flex-end">
+        <SettingsFields>
           <TextInput label={t('komari.server')} placeholder="https://komari.example.com" disabled={readOnly} {...form.getInputProps('server')} />
           <PasswordInput label={t('komari.key')} description={q.data?.has_key ? t('komari.keySet') : t('komari.keyHint')} placeholder={q.data?.has_key ? '••••••••' : ''} disabled={readOnly} {...form.getInputProps('key')} />
-        </Group>
-        <Group grow align="flex-end">
+        </SettingsFields>
+        <SettingsFields>
           <TextInput label={t('komari.name')} description={t('komari.nameHint')} disabled={readOnly} {...form.getInputProps('name')} />
           <NumberInput label={t('komari.interval')} min={1} max={300} disabled={readOnly} {...form.getInputProps('interval')} />
           <Switch label={t('komari.enabled')} mb={6} disabled={readOnly} {...form.getInputProps('enabled', { type: 'checkbox' })} />
-        </Group>
+        </SettingsFields>
         {st && st.enabled && (
           <Text size="xs" c={st.last_error ? 'red' : 'dimmed'}>
             {st.uuid ? `${t('komari.uuid')} ${st.uuid} · ` : ''}{st.reports > 0 ? t('komari.lastReport', { at: when(st.last_report), n: st.reports }) : t('komari.noReport')}{st.last_error ? ` · ${st.last_error}` : ''}

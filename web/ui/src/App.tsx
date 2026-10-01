@@ -8,6 +8,7 @@ import InboundsPage from './pages/InboundsPage'
 import UsersPage from './pages/UsersPage'
 import ForwardsPage from './pages/ForwardsPage'
 import SettingsPage from './pages/SettingsPage'
+import AccountPage from './pages/AccountPage'
 import LogsPage from './pages/LogsPage'
 import CertificatesPage from './pages/CertificatesPage'
 import ProbePage from './pages/ProbePage'
@@ -37,7 +38,8 @@ export default function App() {
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/probe" element={<ProbePage />} />
           <Route path="/doctor" element={<DoctorPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/*" element={<SettingsPage />} />
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/logs" element={<LogsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

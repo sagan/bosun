@@ -1,0 +1,15 @@
+.heading {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+  letter-spacing: 0.04em;
+}
+.link {
+  border-radius: var(--mantine-radius-md);
+  padding: 7px 12px;
+  border-inline-start: 2px solid transparent;
+  &[data-active] { border-inline-start-color: var(--mantine-primary-color-filled); }
+}
+@media (max-width: 47.99em) {
+  .link { min-height: 44px; }
+}

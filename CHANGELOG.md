@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.59.0** (2026-10-02) — Show standalone console pages directly beneath static section headings on desktop and mobile, removing the extra step to expand common tools. Add page-specific icons and a single active navigation item while keeping settings categories, protected drafts, six languages and managed-mode restrictions. No node protocol, configuration or core behavior changes.
+
 - **v0.58.0** (2026-10-01) — Group the standalone console into Overview, Services, Users, and Monitoring and diagnostics. Replace the long settings page with six searchable categories and 12 separately addressable editors; move administrator credentials, TOTP and tokens to My account, and external monitoring integrations to settings.
   - Preserve drafts during background refresh, confirm navigation with unsaved changes, and show retryable initial-load errors before enabling a form. Before whole-document settings saves, read the current configuration and overlay only changed fields from the current section, preserving other sections and blank write-only secrets. Existing managed/fixed-driver restrictions remain enforced.
   - Align responsive forms, update all six languages, and validate translation keys referenced through navigation metadata. The single-administrator model, node protocol, configuration keys and core behavior are unchanged.

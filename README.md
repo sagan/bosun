@@ -11,7 +11,7 @@ Verified end to end against the manifest's tested releases (sing-box
 1.14.1, Xray 26.3.27, mita 3.37.0, Hysteria 2.12.3; see the table under
 "Run"):
 
-- Grouped standalone navigation, searchable settings pages, protected drafts and responsive forms in six languages, with credentials and tokens under My account. [Console navigation](#console-navigation).
+- Direct standalone page links under static section headings on desktop and mobile, searchable settings pages, protected drafts and responsive forms in six languages, with credentials and tokens under My account. [Console navigation](#console-navigation).
 
 - Durable Captain reporting journals, structured Linux exit diagnostics with a separately rebuilt MIT GeoCheck tool, and named typed inbound/outbound/route presets with change previews. [Operation and failure boundaries](docs/DIAGNOSTICS_AND_PRESETS.md).
 
@@ -409,7 +409,9 @@ a notice every six hours when a newer release exists.
 ## Console navigation
 
 The standalone console groups its pages into Overview, Services, Users and
-Monitoring and diagnostics. Settings stays at the bottom of the sidebar, with
+Monitoring and diagnostics. Section labels group directly visible page links
+on desktop and mobile, without a second click to expand common tools. Settings
+stays at the bottom of the sidebar, with
 categories for node identity and pairing, network access, traffic policies,
 subscription output, notifications and integrations, and maintenance. Each
 editor has its own URL, such as `/settings/network`; directory search uses only

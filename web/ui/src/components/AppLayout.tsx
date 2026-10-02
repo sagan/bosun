@@ -1,6 +1,6 @@
 import { ActionIcon, AppShell, Avatar, Badge, Box, Burger, Group, Indicator, Menu, NavLink, ScrollArea, Text, ThemeIcon, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconActivity, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown } from '@tabler/icons-react'
+import { IconLayoutDashboard, IconPlugConnected, IconUsers, IconSettings, IconLogout, IconLanguage, IconActivity, IconAnchor, IconSun, IconMoon, IconDotsVertical, IconChevronDown, IconArrowsExchange, IconTemplate, IconCertificate, IconLink, IconStethoscope, IconFileText } from '@tabler/icons-react'
 import { languages } from '../i18n'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -11,7 +11,7 @@ import { pageBackground } from '../theme'
 import { navigation, navigationGroup } from '../lib/navigation'
 import { GroupedNavigation } from './GroupedNavigation'
 
-const icons = { overview: IconLayoutDashboard, services: IconPlugConnected, users: IconUsers, monitoring: IconActivity }
+const icons = { overview: IconLayoutDashboard, users: IconUsers, '/inbounds': IconPlugConnected, '/forwards': IconArrowsExchange, '/templates': IconTemplate, '/certificates': IconCertificate, '/settings/subscription': IconLink, '/probe': IconActivity, '/doctor': IconStethoscope, '/logs': IconFileText }
 
 export function ModeBadge({ mode, fixed }: { mode: string; fixed?: string }) {
   const { t } = useTranslation()
@@ -63,7 +63,7 @@ export function AppLayout() {
 
       <AppShell.Navbar>
         <AppShell.Section grow component={ScrollArea} type="auto" scrollbarSize={6} px="sm" py="sm">
-          <GroupedNavigation groups={navigation} icons={icons} activeGroup={group} onNavigate={close} />
+          <GroupedNavigation groups={navigation} icons={icons} onNavigate={close} />
         </AppShell.Section>
         <AppShell.Section p="sm" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
           <NavLink component={Link} to="/settings" label={t('nav.settings')} leftSection={<IconSettings size={18} />} active={group === 'system'} onClick={close} mb="sm" styles={{ root: { borderRadius: 8 } }} />

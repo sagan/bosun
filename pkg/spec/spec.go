@@ -164,11 +164,12 @@ type Brutal struct {
 
 // Inbound is one listener. A node may run many, possibly on different cores.
 type Inbound struct {
-	Tag      string   `json:"tag,omitempty"`
-	Protocol Protocol `json:"protocol,omitempty"`
-	Listen   string   `json:"listen,omitempty"` // "" means dual-stack any
-	Port     int      `json:"port"`
-	Core     string   `json:"core,omitempty"` // preferred core name; "" lets the registry choose
+	Reverse  *ReverseInbound `json:"reverse,omitempty"`
+	Tag      string          `json:"tag,omitempty"`
+	Protocol Protocol        `json:"protocol,omitempty"`
+	Listen   string          `json:"listen,omitempty"` // "" means dual-stack any
+	Port     int             `json:"port"`
+	Core     string          `json:"core,omitempty"` // preferred core name; "" lets the registry choose
 
 	TLS       *TLS       `json:"tls,omitempty"`
 	Transport *Transport `json:"transport,omitempty"`
@@ -244,6 +245,9 @@ type Fallback struct {
 // EffectiveUsers returns the users to provision on this inbound given the
 // node-level list.
 func (i Inbound) EffectiveUsers(nodeUsers []User) []User {
+	if i.Reverse != nil && i.Reverse.Receiver {
+		return nil
+	}
 	if i.ScopedUsers {
 		return i.Users
 	}
@@ -420,11 +424,13 @@ type RouteRule struct {
 // stream or datagrams to Target. A chain (entry -> relay -> exit) is just
 // one Forward per hop, each pointing at the next; the panel orchestrates.
 type Forward struct {
-	Tag      string `json:"tag,omitempty"`
-	Listen   string `json:"listen,omitempty"` // "" = all interfaces
-	Port     int    `json:"port"`
-	Protocol string `json:"protocol,omitempty"` // "tcp", "udp" or "both"
-	Target   string `json:"target,omitempty"`   // host:port of the next hop
+	// IngressID is editor metadata. Resolved Listen/Port work with older agents.
+	IngressID string `json:"ingress_id,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	Listen    string `json:"listen,omitempty"` // "" = all interfaces
+	Port      int    `json:"port"`
+	Protocol  string `json:"protocol,omitempty"` // "tcp", "udp" or "both"
+	Target    string `json:"target,omitempty"`   // host:port of the next hop
 	// Backend is "" for bosun's userspace relay, "nft" for kernel DNAT or
 	// "realm" for a zhboner/realm process bosun installs and runs; it is
 	// through nftables (IPv4 targets, needs the nft binary).
@@ -490,12 +496,13 @@ func (f Forward) BalanceMode() string {
 
 // Node is the complete desired state for this server.
 type Node struct {
-	ID        string      `json:"id,omitempty"`
-	Inbounds  []Inbound   `json:"inbounds,omitempty"`
-	Outbounds []Outbound  `json:"outbounds,omitempty"`
-	Routes    []RouteRule `json:"routes,omitempty"`
-	Forwards  []Forward   `json:"forwards,omitempty"`
-	ACME      *ACME       `json:"acme,omitempty"`
+	ReverseClients []ReverseClient `json:"reverse_clients,omitempty"`
+	ID             string          `json:"id,omitempty"`
+	Inbounds       []Inbound       `json:"inbounds,omitempty"`
+	Outbounds      []Outbound      `json:"outbounds,omitempty"`
+	Routes         []RouteRule     `json:"routes,omitempty"`
+	Forwards       []Forward       `json:"forwards,omitempty"`
+	ACME           *ACME           `json:"acme,omitempty"`
 	// Certificates are operator-supplied PEM pairs; see Certificate.
 	Certificates []Certificate `json:"certificates,omitempty"`
 	// DefaultOutbound is the tag traffic takes when no route rule matches

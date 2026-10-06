@@ -54,7 +54,7 @@ func validateIngress(g *Ingress) error {
 		return errors.New("line address must be an IP")
 	}
 	g.EntryHost = strings.ToLower(strings.TrimSpace(g.EntryHost))
-	if strings.ContainsAny(g.EntryHost, " /:") {
+	if g.EntryHost != "" && net.ParseIP(g.EntryHost) == nil && strings.ContainsAny(g.EntryHost, " /:[]") {
 		return errors.New("entry host must be a host name or IP without a port")
 	}
 	g.EntryDomain = strings.ToLower(strings.TrimSpace(g.EntryDomain))
@@ -67,9 +67,19 @@ func validateIngress(g *Ingress) error {
 	if g.LineIP == "" && g.EntryHost == "" {
 		return errors.New("give the line's far-end address, its public entry, or both")
 	}
-	if (g.PortFrom == 0) != (g.PortTo == 0) || g.PortFrom < 0 || g.PortTo > 65535 || g.PortFrom > g.PortTo {
-		return errors.New("port range must be from-to within 1-65535, or empty")
+	if g.Kind == "" {
+		g.Kind = "mapped"
 	}
+	if g.Kind != "mapped" && g.Kind != "nat" && g.Kind != "iplc" {
+		return errors.New("kind must be nat, iplc or mapped")
+	}
+	if g.Kind == "nat" && g.EntryHost == "" {
+		return errors.New("NAT ingress requires a public entry address")
+	}
+	if err := g.Ports().Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -81,8 +91,21 @@ func (s *Store) PutIngress(g Ingress, prevID string) (Ingress, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if prevID == "" {
+	g.ID = prevID
+	if g.ID == "" {
 		g.ID = authutil.Hex(4)
+	}
+	next := []Ingress{}
+	for _, old := range s.st.Ingresses {
+		if old.ID != prevID {
+			next = append(next, old)
+		}
+	}
+	next = append(next, g)
+	if err := s.checkIngressesLocked(next); err != nil {
+		return Ingress{}, err
+	}
+	if prevID == "" {
 		s.st.Ingresses = append(s.st.Ingresses, g)
 		return g, s.commit()
 	}
@@ -96,7 +119,7 @@ func (s *Store) PutIngress(g Ingress, prevID string) (Ingress, error) {
 	return Ingress{}, ErrNotFound
 }
 
-// DeleteIngress removes a line; inbounds using it fall back to direct.
+// DeleteIngress refuses to detach listeners silently.
 func (s *Store) DeleteIngress(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -109,12 +132,12 @@ func (s *Store) DeleteIngress(id string) error {
 	if idx < 0 {
 		return ErrNotFound
 	}
-	s.st.Ingresses = append(s.st.Ingresses[:idx], s.st.Ingresses[idx+1:]...)
-	for i := range s.st.Inbounds {
-		if s.st.Inbounds[i].IngressID == id {
-			s.st.Inbounds[i].IngressID = ""
-		}
+	next := append([]Ingress{}, s.st.Ingresses[:idx]...)
+	next = append(next, s.st.Ingresses[idx+1:]...)
+	if err := s.checkIngressesLocked(next); err != nil {
+		return err
 	}
+	s.st.Ingresses = next
 	return s.commit()
 }
 

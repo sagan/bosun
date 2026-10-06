@@ -447,15 +447,33 @@ administrator has no numeric ID and does not consume user numbers. Its
 username can be changed under My account without creating a subscriber.
 
 The standalone panel carries the same node-side features as Captain's node
-page: line ingresses (IPLC / dedicated NICs: inbounds bind to the line
+page: NAT / IPLC ingresses and port mappings (inbounds and forwards bind to the
 address, share links advertise the provider's entry or its domain on the
-mapped port, and every line gets an RTT task from its NIC), landing
+mapped port, and dedicated lines get an RTT task from their NIC), landing
 outbounds and route rules (paste a share link, chain exits, pick a default
 exit), operator certificates (PEM pairs used ahead of ACME for the names
 they cover) and the probe (carrier latency targets, tasks with an optional
 source address; results on the overview and `/metrics`). In local mode the
 panel's probe settings win; the `probe:` section of config.yaml only applies
 to the Xboard driver.
+
+Ingresses support either a continuous local port range with a public-port
+offset or explicit local ranges mapped to public ranges (equal start/end for a
+single port). Explicit mappings replace the continuous range, cannot overlap,
+and apply equally to TCP and UDP. Reserved ports are local ports, such as the
+provider's SSH mapping. Both inbound and forward edits reject reserved or
+unmapped ports, including the extra UDP port of mieru BOTH. An explicit listen
+address must match the selected ingress's local address; blank inherits it.
+
+Enable **Require an ingress on this node** for a NAT-only server to prohibit
+direct inbound/forward listeners. Existing configurations retain the previous
+default (off); the new NAT form defaults to on. Enabling the policy or changing
+ranges checks existing configurations first, and used ingresses cannot be
+deleted. These restrictions apply to managed proxy/relay listeners, not SSH or
+other system services. They record the provider's mappings; they do not create
+NAT mappings upstream. The local JSON persists `kind`, `port_mappings`,
+`require_ingress` and each forward's `ingress_id`; runtime configuration uses
+resolved bind addresses rather than editor references.
 
 The installer asks for the panel username, password and port when run on a
 terminal (blank keeps `admin`, a generated password and `:2053`; `r` picks a
@@ -924,3 +942,7 @@ whose members are all servers, name patterns per region or other groups,
 plus an ordered ACL4SSR rule list with presets) that generates every
 format at once. Under Captain the page is read-only and Captain's templates
 apply.
+
+## Managed VLESS Reverse
+
+Captain manages multi-transit VLESS Reverse connections with Xray; authentication and accounting stay on the transits, and the exit connects actively. The current tc per-user speed limits do not apply to this multiplexed path. See [the node guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#node-connections-vless-reverse).

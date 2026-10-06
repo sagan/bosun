@@ -141,6 +141,13 @@ func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) 
 	a.statusMu.Unlock()
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
+		if rc, ok := c.(interface {
+			ReverseStatus(context.Context) map[string]*bool
+		}); ok && c.Running() {
+			st := rep.Cores[name]
+			st.Reverse = rc.ReverseStatus(ctx)
+			rep.Cores[name] = st
+		}
 		if tr, ok := c.(core.OnlineTracker); ok && c.Running() {
 			online, err := tr.Online(ctx)
 			if err != nil {

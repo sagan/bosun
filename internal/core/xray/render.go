@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/zeptop-dev/bosun/internal/audit"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 	"github.com/zeptop-dev/bosun/pkg/wg"
@@ -27,6 +28,7 @@ type renderOptions struct {
 // state is carried from Render to Start/Apply so Apply can decide between a
 // hot user update and a restart.
 type state struct {
+	reverse     map[string]bool                 // ID -> receiver (false = active client)
 	inboundsKey string                          // hash of inbounds without users
 	users       map[string]map[string]spec.User // tag -> user name -> user
 	inbounds    map[string]spec.Protocol        // tag -> protocol
@@ -35,10 +37,25 @@ type state struct {
 
 // render produces an Xray JSON configuration for the given inbounds.
 func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]byte, *state, error) {
-	if len(inbounds) == 0 {
+	hasReverse := len(node.ReverseClients) > 0
+	for _, ib := range inbounds {
+		hasReverse = hasReverse || ib.Reverse != nil
+	}
+	if hasReverse {
+		if err := spec.CheckReverseOverride(node.Overrides["xray"]); err != nil {
+			return nil, nil, err
+		}
+		for _, o := range node.Outbounds {
+			if strings.HasPrefix(o.Tag, "reverse-") {
+				return nil, nil, fmt.Errorf("reverse- outbound tags are reserved for managed connections")
+			}
+		}
+	}
+	if len(inbounds) == 0 && len(node.ReverseClients) == 0 {
 		return nil, nil, fmt.Errorf("xray: nothing to render")
 	}
 	st := &state{
+		reverse:  map[string]bool{},
 		users:    make(map[string]map[string]spec.User, len(inbounds)),
 		inbounds: make(map[string]spec.Protocol, len(inbounds)),
 		flows:    map[string]string{},
@@ -47,12 +64,22 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	ins := make([]any, 0, len(inbounds))
 	keyParts := make([]string, 0, len(inbounds))
 	for _, ib := range inbounds {
+		if ib.Reverse != nil {
+			st.reverse[ib.Reverse.ID] = true
+			kb, _ := json.Marshal(ib.Reverse)
+			keyParts = append(keyParts, string(kb))
+		}
 		ibUsers := ib.EffectiveUsers(users)
 		in, err := renderInbound(ib, ibUsers)
 		if err != nil {
 			return nil, nil, err
 		}
 		ins = append(ins, in)
+		if ib.Reverse != nil && ib.Reverse.Receiver {
+			kb, _ := json.Marshal(in)
+			keyParts = append(keyParts, string(kb))
+			continue // tunnel identities are never hot-reloaded as customers
+		}
 		st.inbounds[ib.Tag] = ib.Protocol
 		st.flows[ib.Tag] = ib.Flow
 		byName := make(map[string]spec.User, len(ibUsers))
@@ -73,7 +100,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUserIDs(node, users),
 		// Everything else that only a restart can pick up.
 		"audit": node.AuditRules, "priv": node.PrivateDestRules(), "eg": node.EgressByIngress,
-		"cl": opt.ConnLog, "ov": node.Overrides["xray"]}); err == nil {
+		"cl": opt.ConnLog, "ov": node.Overrides["xray"], "reverse": node.ReverseClients}); err == nil {
 		keyParts = append(keyParts, string(kb))
 	}
 	sum := sha256.Sum256([]byte(strings.Join(keyParts, "\n")))
@@ -113,6 +140,25 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	outs = append(outs, direct, block)
 	outs = append(outs, custom...)
+	var reverseRules []any
+	for _, ib := range inbounds {
+		if r := ib.Reverse; r != nil && !r.Receiver {
+			reverseRules = append(reverseRules, m{"type": "field", "inboundTag": []string{ib.Tag}, "outboundTag": spec.ReverseTag(r.ID)})
+		}
+	}
+	for _, r := range node.ReverseClients {
+		st.reverse[r.ID] = false
+		if err := r.Validate(); err != nil {
+			return nil, nil, err
+		}
+		out, err := renderRemote(spec.Outbound{Tag: spec.ReverseTag(r.ID) + "-client", Remote: &spec.Remote{Host: r.Host, Port: r.Port, UUID: r.UUID, Settings: spec.Inbound{Protocol: spec.VLESS, TLS: r.TLS}}})
+		if err != nil {
+			return nil, nil, err
+		}
+		out["settings"] = m{"address": r.Host, "port": r.Port, "id": r.UUID, "encryption": "none", "reverse": m{"tag": spec.ReverseTag(r.ID) + "-exit"}}
+		outs = append(outs, out)
+		reverseRules = append(reverseRules, m{"type": "field", "inboundTag": []string{spec.ReverseTag(r.ID) + "-exit"}, "outboundTag": "direct"})
+	}
 	// Per-user speed limits: a marking clone of the default exit per user
 	// plus a rule that sends that user's traffic through it.
 	var limitRules []any
@@ -193,6 +239,30 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	if err := core.ApplyOverride("xray", cfg, node.Overrides["xray"]); err != nil {
 		return nil, nil, fmt.Errorf("xray: %w", err)
+	}
+	// Anchor managed exits before operator split routes and shaping clones.
+	// Private-address blocking remains first on both ends. A missing dynamic
+	// reverse outbound fails closed in the pinned Xray version.
+	if len(reverseRules) > 0 {
+		rules := renderRoutes(nil, nil, "", nil)
+		// Audit blocks still apply before a managed exit, on both sides.
+		rules = append(rules, renderRoutes(audit.BlockRules(node.AuditRules), nil, "", nil)[1:]...)
+		// At the transit, route the entire managed inbound to B, including
+		// private destinations: B applies its own private-address protection.
+		// An A-side PrivateDestAllow exception must never turn into A egress.
+		for _, rr := range reverseRules {
+			if rr.(m)["outboundTag"] != "direct" {
+				rules = append(rules, rr)
+			}
+		}
+		rules = append(rules, renderRoutes(node.PrivateDestRules(), nil, "", nil)[1:]...)
+		for _, rr := range reverseRules {
+			if rr.(m)["outboundTag"] == "direct" {
+				rules = append(rules, rr)
+			}
+		}
+		rules = append(rules, renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)[1:]...)
+		cfg["routing"].(m)["rules"] = rules
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	return b, st, err
@@ -296,6 +366,15 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		return nil, fmt.Errorf("xray: inbound %q: %w", ib.Tag, err)
 	}
 	in["streamSettings"] = ss
+	if r := ib.Reverse; r != nil {
+		if err := r.Validate(ib); err != nil {
+			return nil, err
+		}
+		if r.Receiver {
+			in["settings"] = m{"decryption": "none", "clients": []any{m{"id": r.UUID, "email": spec.ReverseEmail(r.ID), "reverse": m{"tag": spec.ReverseTag(r.ID)}}}}
+			delete(in, "sniffing")
+		}
+	}
 	return in, nil
 }
 

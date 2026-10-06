@@ -272,7 +272,13 @@ func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, 
 	}
 	rctx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
-	return v2stats.QueryUsers(rctx, conn, methodQueryStats, "user>>>", reset)
+	stats, err := v2stats.QueryUsers(rctx, conn, methodQueryStats, "user>>>", reset)
+	for key := range stats {
+		if spec.IsReverseEmail(key) {
+			delete(stats, key)
+		}
+	}
+	return stats, err
 }
 
 // InboundStats implements core.InboundStatser.
@@ -317,6 +323,9 @@ func (c *Core) feedConn(line string) {
 		return
 	}
 	if user, ip, host, port, network, ok := connlog.ParseXray(line); ok {
+		if spec.IsReverseEmail(user) {
+			return
+		}
 		c.opt.ConnSink(user, ip, host, port, network)
 	}
 }

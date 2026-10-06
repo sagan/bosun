@@ -16,6 +16,11 @@ import (
 // the panel can show it on the form and the agent in the doctor. Fields a
 // core fills later (certificate paths for auto_cert) are not required.
 func (i Inbound) Validate() error {
+	if i.Reverse != nil {
+		if err := i.Reverse.Validate(i); err != nil {
+			return err
+		}
+	}
 	if !ValidTag(i.Tag) {
 		return fmt.Errorf("tag may only contain letters, digits, . _ : - (max 64)")
 	}

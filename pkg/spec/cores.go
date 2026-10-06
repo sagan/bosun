@@ -10,6 +10,7 @@ import (
 // CoreCapabilities describes the features implemented by a bosun adapter,
 // rather than everything the upstream binary may support.
 type CoreCapabilities struct {
+	VLESSReverse    bool       `json:"vless_reverse,omitempty"`
 	Protocols       []Protocol `json:"protocols"`
 	Transports      []string   `json:"transports,omitempty"`
 	Shadowsocks2022 bool       `json:"shadowsocks2022,omitempty"`
@@ -27,6 +28,8 @@ func (c CoreCapabilities) Supports(ib Inbound) bool { return c.UnsupportedReason
 // (keys, addresses, required TLS, etc.) remains Inbound.Validate's job.
 func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
 	switch {
+	case ib.Reverse != nil && (!c.VLESSReverse || (!ib.Reverse.Receiver && (ib.Protocol == WireGuard || ib.Protocol == SOCKS || ib.Protocol == HTTP))):
+		return "reverse"
 	case !slices.Contains(c.Protocols, ib.Protocol):
 		return "protocol"
 	case ib.Protocol == Shadowsocks && strings.HasPrefix(ib.Cipher, "2022-") && !c.Shadowsocks2022:
@@ -58,7 +61,7 @@ type CoreCandidate struct {
 func CoreCatalog() []CoreCandidate {
 	return []CoreCandidate{
 		{"singbox", CoreCapabilities{Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
-		{"xray", CoreCapabilities{Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true}},
+		{"xray", CoreCapabilities{Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
 		{"mita", CoreCapabilities{Protocols: []Protocol{Mieru}, HotUserReload: true}},
 		{"hysteria", CoreCapabilities{Protocols: []Protocol{Hysteria2}, HotUserReload: true}},
 		{"snell", CoreCapabilities{Protocols: []Protocol{Snell}, SnellObfsTLS: true}},
@@ -153,6 +156,9 @@ func CoreProbe(q url.Values) Inbound {
 	ib := Inbound{Protocol: Protocol(q.Get("protocol")), Cipher: q.Get("cipher"), Transport: &Transport{Type: q.Get("transport")}, AcceptProxyProtocol: q.Get("proxy_protocol") == "true", SnellMultiUser: q.Get("snell_multi_user") == "true", SnellObfs: q.Get("snell_obfs")}
 	if q.Get("reality") == "true" {
 		ib.TLS = &TLS{Mode: TLSReality}
+	}
+	if q.Get("reverse") == "true" {
+		ib.Reverse = &ReverseInbound{ID: "preview"}
 	}
 	if q.Get("shadow_tls") == "true" {
 		ib.ShadowTLS = &ShadowTLS{}

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type Inbound, type Ingress } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { toast } from '../lib/notify'
+import { ingressPortLabel } from '../lib/ingress'
 import { PageHeader } from '../components/PageHeader'
 import { IngressFields, emptyIngress, ingressPayload, ingressValues, type IngressValues } from '../components/IngressFields'
 
@@ -33,7 +34,7 @@ export default function IngressesPage({ embedded }: { embedded?: boolean }) {
         ? <Group justify="space-between" align="flex-start" mb="sm"><Text size="xs" c="dimmed" maw={720}>{t('ingress.hint')}</Text>{!readOnly && <Button size="xs" variant="light" leftSection={<IconPlus size={14} />} onClick={() => open('new')}>{t('ingress.add')}</Button>}</Group>
         : <PageHeader title={t('ingress.title')} subtitle={t('ingress.hint')} actions={!readOnly && <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>{t('ingress.add')}</Button>} />}
       <Card p={0}>
-        <Table>
+        <Table.ScrollContainer minWidth={680}><Table>
           <Table.Thead><Table.Tr><Table.Th>{t('ingress.name')}</Table.Th><Table.Th>{t('ingress.bindIP')}</Table.Th><Table.Th>{t('ingress.lineIP')}</Table.Th><Table.Th>{t('ingress.entryHost')}</Table.Th><Table.Th>{t('ingress.ports')}</Table.Th><Table.Th>{t('ingress.inbounds')}</Table.Th><Table.Th /></Table.Tr></Table.Thead>
           <Table.Tbody>
             {(q.data ?? []).map((g) => (
@@ -42,7 +43,7 @@ export default function IngressesPage({ embedded }: { embedded?: boolean }) {
                 <Table.Td>{g.bind_ip ? <Code>{g.bind_ip}</Code> : <Text size="xs" c="dimmed">{t('ingress.anyAddr')}</Text>}</Table.Td>
                 <Table.Td>{g.line_ip ? <Code>{g.line_ip}</Code> : '—'}</Table.Td>
                 <Table.Td>{g.entry_host ? <><Code>{g.entry_host}</Code>{g.entry_domain && <Text size="xs" c="dimmed">{g.entry_domain}</Text>}</> : <Tooltip label={t('ingress.noEntryHint')} multiline w={320}><Badge size="xs" color="orange" variant="light">{t('ingress.noEntry')}</Badge></Tooltip>}</Table.Td>
-                <Table.Td><Text size="xs">{g.port_from ? `${g.port_from}–${g.port_to}` : t('ingress.anyPort')}{g.port_offset ? ` (${g.port_offset > 0 ? '+' : ''}${g.port_offset})` : ''}</Text></Table.Td>
+                <Table.Td><Text size="xs">{ingressPortLabel(g) || t('ingress.anyPort')}</Text></Table.Td>
                 <Table.Td><Text size="xs">{uses(g.id)}</Text></Table.Td>
                 <Table.Td><Group gap={4} justify="flex-end" wrap="nowrap">
                   {!readOnly && <ActionIcon variant="subtle" color="gray" onClick={() => open(g)}><IconPencil size={16} /></ActionIcon>}
@@ -52,7 +53,7 @@ export default function IngressesPage({ embedded }: { embedded?: boolean }) {
             ))}
             {(q.data ?? []).length === 0 && <Table.Tr><Table.Td colSpan={7}><Text c="dimmed" ta="center" py="lg">{t('ingress.empty')}</Text></Table.Td></Table.Tr>}
           </Table.Tbody>
-        </Table>
+        </Table></Table.ScrollContainer>
       </Card>
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? t('ingress.add') : t('common.edit')} size="lg">
         <form onSubmit={form.onSubmit((v) => save.mutate(v))}><Stack>

@@ -86,7 +86,7 @@ func TestIngresses(t *testing.T) {
 	if line := p.Tasks[1]; line.ID != -1 || line.Name != "IPLC" || line.Target != "198.51.100.20:17710" || line.SourceIP != "10.10.0.2" || line.IntervalSeconds != 30 {
 		t.Fatalf("line task: %+v", line)
 	}
-	// Update keeps the id; delete detaches the inbound.
+	// Update keeps the id; deleting a used ingress cannot detach its listener.
 	g2, err := s.PutIngress(Ingress{Name: "IPLC2", LineIP: "198.51.100.20"}, g.ID)
 	if err != nil || g2.ID != g.ID || g2.Name != "IPLC2" {
 		t.Fatalf("update: %+v %v", g2, err)
@@ -94,12 +94,18 @@ func TestIngresses(t *testing.T) {
 	if _, err := s.PutIngress(Ingress{Name: "x", LineIP: "198.51.100.20"}, "missing"); err != ErrNotFound {
 		t.Fatalf("update missing: %v", err)
 	}
+	if err := s.DeleteIngress(g.ID); err == nil {
+		t.Fatal("deleted a used ingress")
+	}
+	ib, _ := s.Inbound("m")
+	ib.IngressID = ""
+	if err := s.PutInbound(ib, ib.Tag); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DeleteIngress(g.ID); err != nil {
 		t.Fatal(err)
 	}
-	if ib, _ := s.Inbound("m"); ib.IngressID != "" {
-		t.Fatal("inbound should be detached")
-	}
+
 	// Adopt/detach round-trips the extras through the snapshot.
 	_, _ = s.PutIngress(Ingress{Name: "L", LineIP: "198.51.100.20"}, "")
 	_ = s.Adopt("https://captain.example")

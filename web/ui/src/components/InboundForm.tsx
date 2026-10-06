@@ -4,6 +4,7 @@ import { IconRefresh } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Fallback, type FallbackLimit, type Inbound, type Ingress, type IngressInput, type Settings } from '../lib/api'
+import { firstFreeIngressPort, ingressPortLabel } from '../lib/ingress'
 import { ConfigPresets } from './ConfigPresets'
 import { useCoreSelection } from '../lib/coreSelection'
 import { useQuery } from '@tanstack/react-query'
@@ -166,13 +167,13 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   try { coreInbound = toInbound(v) } catch { /* JSON validation explains the error */ }
   const coreSelection = useCoreSelection('/api/inbounds/core-options', coreInbound, v.core)
   const selectedIngress = ingresses.find((g) => g.id === v.ingress_id)
-  const firstFree = (g?: { port_from: number; port_to: number; reserved_ports?: number[] }) => { if (!g || !g.port_from) return 0; for (let p = g.port_from; p <= g.port_to; p++) if (!usedPorts.includes(p) && !(g.reserved_ports ?? []).includes(p)) return p; return 0 }
-  useEffect(() => { if (lineOnly && !initial.ingress_id && !initial.tag && ingresses[0]) form.setValues({ ingress_id: ingresses[0].id, port: firstFree(ingresses[0]) || form.values.port }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const firstFree = (g: Ingress) => firstFreeIngressPort(g, usedPorts)
+  useEffect(() => { if ((lineOnly || ingresses.some(g => g.require_ingress)) && !initial.ingress_id && !initial.tag && ingresses[0]) form.setValues({ ingress_id: ingresses[0].id, port: firstFree(ingresses[0]) || form.values.port }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const onIngress = (val: string | null) => {
     if (val === 'new') { setNewIngress(true); ingressForm.setValues(emptyIngress); form.setFieldValue('ingress_id', ''); return }
     setNewIngress(false)
     const g = ingresses.find((x) => x.id === val)
-    form.setValues({ ingress_id: val ?? '', port: g && g.port_from ? firstFree(g) || v.port : v.port })
+    form.setValues({ ingress_id: val ?? '', port: g ? firstFree(g) || v.port : v.port })
   }
   const stream = ['vless', 'vmess', 'trojan', 'shadowsocks', 'anytls', 'socks', 'http'].includes(v.protocol)
   const quic = ['hysteria2', 'tuic', 'naive'].includes(v.protocol)
@@ -197,7 +198,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   }
   const apply = (r: (typeof recipes)[number]) => {
     // A recipe keeps the chosen line ingress and takes a port from its range; any protocol may ride a line.
-    const port = selectedIngress && selectedIngress.port_from ? (firstFree(selectedIngress) || r.values.port) : r.values.port
+    const port = selectedIngress ? (firstFree(selectedIngress) || r.values.port) : r.values.port
     form.setValues({ ...empty, ...r.values, core: v.core, port, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true, ingress_id: v.ingress_id })
     if (r.values.tls === 'reality') void genReality()
     if (r.values.cipher?.startsWith('2022')) void genKey()
@@ -239,9 +240,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           <Select label={t('inbounds.protocol')} data={protocols} required allowDeselect={false} {...form.getInputProps('protocol')} />
         </Group>
         <Select label={t('inbounds.ingress')}
-          description={newIngress ? t('inbounds.ingressNewHint') : selectedIngress ? (t('inbounds.ingressHint', { host: clientHost(selectedIngress) || t('ingress.noEntry'), ports: selectedIngress.port_from ? `${selectedIngress.port_from}–${selectedIngress.port_to}` : t('ingress.anyPort') }) + (selectedIngress.bind_ip ? ' ' + t('inbounds.ingressBindHint', { ip: selectedIngress.bind_ip }) : '')) : t('inbounds.ingressDirectHint')}
+          description={newIngress ? t('inbounds.ingressNewHint') : selectedIngress ? (t('inbounds.ingressHint', { host: clientHost(selectedIngress) || t('ingress.noEntry'), ports: ingressPortLabel(selectedIngress) || t('ingress.anyPort') }) + (selectedIngress.bind_ip ? ' ' + t('inbounds.ingressBindHint', { ip: selectedIngress.bind_ip }) : '')) : t('inbounds.ingressDirectHint')}
           allowDeselect={false}
-          data={[{ value: '', label: t('inbounds.ingressDirect') }, ...ingresses.map((g) => ({ value: g.id, label: ingressLabel(g) })), { value: 'new', label: t('inbounds.ingressNew') }]}
+          data={[{ value: '', label: t('inbounds.ingressDirect'), disabled: ingresses.some(g => g.require_ingress) }, ...ingresses.map((g) => ({ value: g.id, label: ingressLabel(g) })), { value: 'new', label: t('inbounds.ingressNew') }]}
           value={newIngress ? 'new' : v.ingress_id} onChange={onIngress} />
         {lineOnly && !v.ingress_id && !newIngress && <Text size="xs" c="orange">{t('inbounds.lineOnlyHint')}</Text>}
         {newIngress && (

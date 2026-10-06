@@ -49,15 +49,21 @@ func (s *Server) extraRoutes() {
 // ingressInput accepts the PascalCase keys the forms send and the
 // snake_case keys of the stored object.
 type ingressInput struct {
-	Name          string `json:"Name"`
-	BindIP        string `json:"BindIP"`
-	LineIP        string `json:"LineIP"`
-	EntryHost     string `json:"EntryHost"`
-	EntryDomain   string `json:"EntryDomain"`
-	PortFrom      int    `json:"PortFrom"`
-	PortTo        int    `json:"PortTo"`
-	PortOffset    int    `json:"PortOffset"`
-	ReservedPorts []int  `json:"ReservedPorts"`
+	Kind            string              `json:"Kind"`
+	SKind           string              `json:"kind"`
+	PortMappings    *[]spec.PortMapping `json:"PortMappings"`
+	SPortMappings   *[]spec.PortMapping `json:"port_mappings"`
+	RequireIngress  *bool               `json:"RequireIngress"`
+	SRequireIngress *bool               `json:"require_ingress"`
+	Name            string              `json:"Name"`
+	BindIP          string              `json:"BindIP"`
+	LineIP          string              `json:"LineIP"`
+	EntryHost       string              `json:"EntryHost"`
+	EntryDomain     string              `json:"EntryDomain"`
+	PortFrom        int                 `json:"PortFrom"`
+	PortTo          int                 `json:"PortTo"`
+	PortOffset      int                 `json:"PortOffset"`
+	ReservedPorts   []int               `json:"ReservedPorts"`
 
 	SName          string `json:"name"`
 	SBindIP        string `json:"bind_ip"`
@@ -70,7 +76,7 @@ type ingressInput struct {
 	SReservedPorts []int  `json:"reserved_ports"`
 }
 
-func (in ingressInput) ingress() local.Ingress {
+func (in ingressInput) ingress(previous ...local.Ingress) local.Ingress {
 	pick := func(a, b string) string {
 		if a != "" {
 			return a
@@ -83,22 +89,37 @@ func (in ingressInput) ingress() local.Ingress {
 		}
 		return b
 	}
+	var extra local.Ingress
+	if len(previous) > 0 {
+		extra = previous[0]
+	}
+	if k := pick(in.Kind, in.SKind); k != "" {
+		extra.Kind = k
+	}
+	mappings := in.PortMappings
+	if mappings == nil {
+		mappings = in.SPortMappings
+	}
+	if mappings != nil {
+		extra.PortMappings = *mappings
+	}
+	require := in.RequireIngress
+	if require == nil {
+		require = in.SRequireIngress
+	}
+	if require != nil {
+		extra.RequireIngress = *require
+	}
 	return local.Ingress{
+		Kind: extra.Kind, PortMappings: extra.PortMappings, RequireIngress: extra.RequireIngress,
 		Name: pick(in.Name, in.SName), BindIP: pick(in.BindIP, in.SBindIP), LineIP: pick(in.LineIP, in.SLineIP),
 		EntryHost: pick(in.EntryHost, in.SEntryHost), EntryDomain: pick(in.EntryDomain, in.SEntryDomain),
 		PortFrom: pickInt(in.PortFrom, in.SPortFrom), PortTo: pickInt(in.PortTo, in.SPortTo), PortOffset: pickInt(in.PortOffset, in.SPortOffset),
 		ReservedPorts: func() []int {
-			src := in.ReservedPorts
-			if len(src) == 0 {
-				src = in.SReservedPorts
+			if in.ReservedPorts != nil {
+				return in.ReservedPorts
 			}
-			out := []int{}
-			for _, p := range src {
-				if p > 0 && p < 65536 {
-					out = append(out, p)
-				}
-			}
-			return out
+			return in.SReservedPorts
 		}(),
 	}
 }
@@ -127,7 +148,12 @@ func (s *Server) updateIngress(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	g, err := s.d.Store.PutIngress(in.ingress(), r.PathValue("id"))
+	cur, found := s.d.Store.Ingress(r.PathValue("id"))
+	if !found {
+		storeErr(w, local.ErrNotFound)
+		return
+	}
+	g, err := s.d.Store.PutIngress(in.ingress(cur), r.PathValue("id"))
 	if err != nil {
 		storeErr(w, err)
 		return

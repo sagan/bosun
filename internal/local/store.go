@@ -368,15 +368,16 @@ func (s *Store) PutInbound(ib Inbound, prevTag string) error {
 	if prevTag != "" && idx < 0 {
 		return ErrNotFound
 	}
+	if err := checkIngressListener(s.st.Ingresses, ib.IngressID, ib.Listen, ib.Port); err != nil {
+		return err
+	}
 	if ib.IngressID != "" {
-		g, found := s.ingressLocked(ib.IngressID)
-		if !found {
-			return errors.New("ingress not found")
-		}
-		if !g.AllowsPort(ib.Port) {
-			return fmt.Errorf("port %d is outside the %s line's range %d-%d", ib.Port, g.Name, g.PortFrom, g.PortTo)
+		g, _ := s.ingressLocked(ib.IngressID)
+		if err := g.Ports().CheckInbound(ib.Inbound); err != nil {
+			return err
 		}
 	}
+
 	if idx < 0 {
 		s.st.Inbounds = append(s.st.Inbounds, ib)
 	} else {
@@ -610,6 +611,9 @@ func (s *Store) PutForward(f spec.Forward, prevTag string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := checkIngressListener(s.st.Ingresses, f.IngressID, f.Listen, f.Port); err != nil {
+		return err
+	}
 	idx := -1
 	for i, cur := range s.st.Forwards {
 		if cur.Tag == prevTag && prevTag != "" {
@@ -830,7 +834,7 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	for _, u := range usable {
 		nodeUsers = append(nodeUsers, specOf(u))
 	}
-	node := &spec.Node{ID: "local", Forwards: append([]spec.Forward(nil), s.st.Forwards...),
+	node := &spec.Node{ID: "local", Forwards: s.resolvedForwardsLocked(),
 		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
 		Certificates: append([]spec.Certificate(nil), s.st.Certificates...), DNS: append([]string(nil), s.st.DNS...), UserSpeedLimitMbps: s.st.Settings.UserSpeedLimitMbps}
 	if base := s.st.ImportedNode; base != nil {
@@ -936,7 +940,7 @@ func (s *Store) Forwards(ctx context.Context) ([]spec.Forward, bool, error) {
 		return nil, false, nil
 	}
 	s.fwdSeen = s.st.Revision
-	return append([]spec.Forward{}, s.st.Forwards...), true, nil
+	return s.resolvedForwardsLocked(), true, nil
 }
 
 // Report implements panel.Reporter: traffic lands on users, everything else

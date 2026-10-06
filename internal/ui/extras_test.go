@@ -140,7 +140,13 @@ func TestParityAPI(t *testing.T) {
 	if _, b := c.do("GET", "/api/status", nil); !strings.Contains(string(b), `"pings":[]`) {
 		t.Fatalf("status pings: %s", b)
 	}
-	// Deleting the ingress detaches the inbound; links fall back to the host.
+	// Used ingresses are protected; explicitly reassign the inbound first.
+	if code, _ := c.do("DELETE", "/api/ingresses/"+g.ID, nil); code != 400 {
+		t.Fatal("deleted used ingress")
+	}
+	if code, b := c.do("PUT", "/api/inbounds/m", map[string]any{"tag": "m", "protocol": "mieru", "port": 17710, "enabled": true}); code != 200 {
+		t.Fatalf("reassign inbound: %d %s", code, b)
+	}
 	if code, _ := c.do("DELETE", "/api/ingresses/"+g.ID, nil); code != 200 {
 		t.Fatal("delete ingress")
 	}

@@ -56,7 +56,7 @@ export interface User {
   online: string[]; usable: boolean; over_devices?: boolean; over_devices_until?: string
 }
 export interface ForwardTarget { target: string; weight?: number }
-export interface Forward { tag: string; listen?: string; port: number; protocol: string; target: string; backend?: string; preserve_source?: boolean; proxy_protocol?: boolean; targets?: ForwardTarget[]; balance?: string; weight?: number; status: ForwardStatus | null }
+export interface Forward { ingress_id?: string; tag: string; listen?: string; port: number; protocol: string; target: string; backend?: string; preserve_source?: boolean; proxy_protocol?: boolean; targets?: ForwardTarget[]; balance?: string; weight?: number; status: ForwardStatus | null }
 export interface DoctorCheck { id: string; name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; detail?: string }
 export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { ok: number; warn: number; fail: number; skip: number } }
 export interface RestoreResult { inbounds: number; users: number; forwards: number; ingresses: number; admin_changed: boolean }
@@ -83,8 +83,9 @@ export interface UpdateInfo {
 export interface LogEntry { time: string; level: string; msg: string; attrs?: string }
 
 // Line ingresses: an IPLC / dedicated line in front of this node.
-export interface Ingress { id: string; name: string; bind_ip: string; line_ip: string; entry_host: string; entry_domain: string; port_from: number; port_to: number; port_offset: number; reserved_ports?: number[] }
-export interface IngressInput { Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number; ReservedPorts?: number[] }
+export interface PortMapping { local_from: number; local_to: number; public_from: number }
+export interface Ingress { kind?: string; port_mappings?: PortMapping[]; require_ingress?: boolean; id: string; name: string; bind_ip: string; line_ip: string; entry_host: string; entry_domain: string; port_from: number; port_to: number; port_offset: number; reserved_ports?: number[] }
+export interface IngressInput { Kind?: string; PortMappings?: PortMapping[]; RequireIngress?: boolean; Name: string; BindIP: string; LineIP: string; EntryHost: string; EntryDomain: string; PortFrom: number; PortTo: number; PortOffset: number; ReservedPorts?: number[] }
 // Outbounds and routing (landing servers, relay chains).
 export interface Remote { host: string; port: number; uuid?: string; password?: string; username?: string; settings: { protocol: string } }
 export interface Outbound { tag: string; protocol?: string; settings?: Record<string, unknown>; proxy_tag?: string; remote?: Remote; warp?: { from_node?: boolean }; balancer?: { members: string[]; strategy?: string } }

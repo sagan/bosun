@@ -213,8 +213,11 @@ type ForwardTargetStatus struct {
 
 // CoreStatus is one core's state.
 type CoreStatus struct {
-	Running bool   `json:"running"`
-	Version string `json:"version,omitempty"`
+	// Reverse reports applied link IDs. A receiver has a live connection
+	// observation; a client is null (configured, connectivity observed at A).
+	Reverse map[string]*bool `json:"reverse,omitempty"`
+	Running bool             `json:"running"`
+	Version string           `json:"version,omitempty"`
 	// Capabilities marks the complete enabled-core inventory (priority order).
 	// Missing on old nodes; Running=false alone never means unavailable.
 	Capabilities *spec.CoreCapabilities `json:"capabilities,omitempty"`

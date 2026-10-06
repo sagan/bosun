@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPencil, IconPlus, IconTrash } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { api, type Forward } from '../lib/api'
+import { api, type Forward, type Ingress } from '../lib/api'
+import { firstFreeIngressPort } from '../lib/ingress'
 import { useAuth } from '../lib/auth'
 import { bytes } from '../lib/format'
 import { toast } from '../lib/notify'
@@ -13,10 +14,11 @@ import { PageHeader } from '../components/PageHeader'
 import RoutingPage from './RoutingPage'
 
 type Values = {
+ ingress_id: string;
   tag: string; listen: string; port: number; protocol: string; target: string; backend: string; preserve_source: boolean; proxy_protocol: boolean
   targets: { target: string; weight: number }[]; balance: string; weight: number
 }
-const empty: Values = { tag: '', listen: '', port: 10000, protocol: 'tcp', target: '', backend: '', preserve_source: false, proxy_protocol: false, targets: [], balance: 'failover', weight: 1 }
+const empty: Values = { ingress_id: '', tag: '', listen: '', port: 10000, protocol: 'tcp', target: '', backend: '', preserve_source: false, proxy_protocol: false, targets: [], balance: 'failover', weight: 1 }
 
 // payload drops what the chosen backend cannot use: nft forwards to one
 // address, realm only spreads (no failover), blank rows are ignored.
@@ -33,6 +35,7 @@ export default function ForwardsPage() {
   const qc = useQueryClient()
   const readOnly = me?.mode !== 'local' || !!me?.fixed
   const q = useQuery({ queryKey: ['forwards'], queryFn: () => api.get<Forward[]>('/api/forwards'), refetchInterval: 5_000 })
+  const ingresses = useQuery({ queryKey: ['ingresses'], queryFn: () => api.get<Ingress[]>('/api/ingresses') })
   const [editing, setEditing] = useState<Forward | 'new' | null>(null)
   const form = useForm<Values>({ initialValues: empty, validate: {
     target: (v) => (/^.+:\d+$/.test(v) ? null : t('forwards.targetInvalid')),
@@ -46,8 +49,9 @@ export default function ForwardsPage() {
   })
   const del = useMutation({ mutationFn: (tag: string) => api.del(`/api/forwards/${encodeURIComponent(tag)}`), onSuccess: () => { toast.ok(t('common.deleted')); invalidate() }, onError: toast.err })
   const open = (f: Forward | 'new') => {
-    form.setValues(f === 'new' ? empty : {
-      tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target, backend: f.backend ?? '',
+    const first = ingresses.data?.[0]
+    form.setValues(f === 'new' ? { ...empty, ...(ingresses.data?.some(g => g.require_ingress) && first ? { ingress_id: first.id, port: firstFreeIngressPort(first, (q.data ?? []).map(f => f.port)) || empty.port } : {}) } : {
+      ingress_id: f.ingress_id || '', tag: f.tag, listen: f.listen ?? '', port: f.port, protocol: f.protocol, target: f.target, backend: f.backend ?? '',
       preserve_source: !!f.preserve_source, proxy_protocol: !!f.proxy_protocol,
       targets: (f.targets ?? []).map((x) => ({ target: x.target, weight: x.weight || 1 })), balance: f.balance || 'failover', weight: f.weight || 1,
     })
@@ -62,7 +66,7 @@ export default function ForwardsPage() {
       {tab === 'routing' && <RoutingPage embedded />}
       {tab === 'forwards' && <>
       <Card p={0}>
-        <Table>
+        <Table.ScrollContainer minWidth={680}><Table>
           <Table.Thead><Table.Tr>
             <Table.Th>{t('forwards.tag')}</Table.Th><Table.Th>{t('forwards.listen')}</Table.Th><Table.Th>{t('forwards.target')}</Table.Th><Table.Th>{t('forwards.health')}</Table.Th><Table.Th>{t('forwards.conns')}</Table.Th><Table.Th>{t('forwards.bytes')}</Table.Th><Table.Th />
           </Table.Tr></Table.Thead>
@@ -85,13 +89,14 @@ export default function ForwardsPage() {
             ))}
             {(q.data ?? []).length === 0 && <Table.Tr><Table.Td colSpan={7}><Text c="dimmed" ta="center" py="lg">{t('forwards.emptyHint')}</Text></Table.Td></Table.Tr>}
           </Table.Tbody>
-        </Table>
+        </Table></Table.ScrollContainer>
       </Card>
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? t('forwards.create') : t('common.edit')}>
         <form onSubmit={form.onSubmit((v) => save.mutate(v))}><Stack>
+          <Select label={t('inbounds.ingress')} allowDeselect={false} value={form.values.ingress_id} data={[{ value: '', label: t('inbounds.ingressDirect'), disabled: ingresses.data?.some(g => g.require_ingress) }, ...(ingresses.data ?? []).map(g => ({ value: g.id, label: g.name }))]} onChange={v => { const g = ingresses.data?.find(g => g.id === v); form.setValues({ ingress_id: v || '', listen: '', ...(g ? { port: firstFreeIngressPort(g, (q.data ?? []).filter(f => f.tag !== (editing === 'new' ? '' : editing?.tag)).map(f => f.port)) || form.values.port } : {}) }) }} />
           <TextInput label={t('forwards.tag')} placeholder={t('forwards.tagHint')} {...form.getInputProps('tag')} />
           <Group grow>
-            <TextInput label={t('forwards.listenAddr')} placeholder="0.0.0.0" {...form.getInputProps('listen')} />
+            <TextInput label={t('forwards.listenAddr')} placeholder={ingresses.data?.find(g => g.id === form.values.ingress_id)?.bind_ip || '0.0.0.0'} {...form.getInputProps('listen')} />
             <NumberInput label={t('forwards.port')} min={1} max={65535} required {...form.getInputProps('port')} />
             <Select label={t('forwards.protocol')} data={['tcp', 'udp', 'both']} allowDeselect={false} {...form.getInputProps('protocol')} />
           </Group>

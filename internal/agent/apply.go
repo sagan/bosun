@@ -306,7 +306,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 
 func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inbounds []spec.Inbound, restart bool) error {
 	c, _ := a.reg.Get(name)
-	if len(inbounds) == 0 {
+	if len(inbounds) == 0 && !(name == "xray" && len(node.ReverseClients) > 0) {
 		if c.Running() {
 			a.log.Info("core has no inbounds, stopping", "core", name)
 			if err := c.Stop(ctx); err != nil {

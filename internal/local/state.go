@@ -80,15 +80,18 @@ type State struct {
 // or dedicated line with its own NIC address, the far-end address relays
 // forward to, an optional provider-supplied public entry and a port range.
 type Ingress struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	BindIP      string `json:"bind_ip"`      // local NIC address inbounds bind to ("" = all)
-	LineIP      string `json:"line_ip"`      // far-end address a relay forwards to
-	EntryHost   string `json:"entry_host"`   // provider's public entry clients dial ("" = none)
-	EntryDomain string `json:"entry_domain"` // name for the public entry, advertised instead of the IP
-	PortFrom    int    `json:"port_from"`    // usable port range (0 = any)
-	PortTo      int    `json:"port_to"`
-	PortOffset  int    `json:"port_offset"` // entry port = local port + offset
+	Kind           string             `json:"kind"`
+	PortMappings   []spec.PortMapping `json:"port_mappings,omitempty"`
+	RequireIngress bool               `json:"require_ingress"`
+	ID             string             `json:"id"`
+	Name           string             `json:"name"`
+	BindIP         string             `json:"bind_ip"`      // local NIC address inbounds bind to ("" = all)
+	LineIP         string             `json:"line_ip"`      // far-end address a relay forwards to
+	EntryHost      string             `json:"entry_host"`   // provider's public entry clients dial ("" = none)
+	EntryDomain    string             `json:"entry_domain"` // name for the public entry, advertised instead of the IP
+	PortFrom       int                `json:"port_from"`    // usable port range (0 = any)
+	PortTo         int                `json:"port_to"`
+	PortOffset     int                `json:"port_offset"` // entry port = local port + offset
 	// ReservedPorts are mapped ports the provider keeps (SSH); inbounds skip them.
 	ReservedPorts []int `json:"reserved_ports,omitempty"`
 }
@@ -103,17 +106,14 @@ func (g Ingress) ClientHost() string {
 }
 
 // EntryPort maps a local inbound port to the port clients dial.
-func (g Ingress) EntryPort(local int) int { return local + g.PortOffset }
+func (g Ingress) Ports() spec.IngressPorts {
+	return spec.IngressPorts{From: g.PortFrom, To: g.PortTo, Offset: g.PortOffset, Reserved: g.ReservedPorts, Mappings: g.PortMappings}
+}
+
+func (g Ingress) EntryPort(local int) int { return g.Ports().EntryPort(local) }
 
 // AllowsPort reports whether a local port fits the line's range and is not reserved.
-func (g Ingress) AllowsPort(p int) bool {
-	for _, r := range g.ReservedPorts {
-		if r == p {
-			return false
-		}
-	}
-	return g.PortFrom == 0 || (p >= g.PortFrom && p <= g.PortTo)
-}
+func (g Ingress) AllowsPort(p int) bool { return g.Ports().Check(p) == nil }
 
 // ProbePort is the far-end port the line RTT task uses when no inbound
 // is on the line: a reserved (provider, e.g. SSH) port answers, else the
@@ -124,6 +124,9 @@ func (g Ingress) ProbePort() int {
 	}
 	if g.PortFrom > 0 {
 		return g.PortFrom
+	}
+	if len(g.PortMappings) > 0 {
+		return g.PortMappings[0].LocalFrom
 	}
 	return 80
 }

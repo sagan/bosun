@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 
 	"github.com/zeptop-dev/bosun/internal/core/grpcraw"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 const (
@@ -219,7 +220,39 @@ func (c *Core) Online(ctx context.Context) (map[string][]string, error) {
 		return nil, err
 	}
 	c.online.add(s)
-	return c.online.online(), nil
+	out := c.online.online()
+	for key := range out {
+		if spec.IsReverseEmail(key) {
+			delete(out, key)
+		}
+	}
+	return out, nil
+}
+
+// ReverseStatus uses a fresh live sample, never the three-minute customer
+// activity window. A sampling error is unknown rather than disconnected.
+func (c *Core) ReverseStatus(ctx context.Context) map[string]*bool {
+	c.mu.Lock()
+	ids := map[string]bool{}
+	if c.applied != nil {
+		for id, receiver := range c.applied.reverse {
+			ids[id] = receiver
+		}
+	}
+	c.mu.Unlock()
+	out := map[string]*bool{}
+	if len(ids) == 0 || !c.Running() {
+		return out
+	}
+	sample, err := c.sample(ctx)
+	for id, receiver := range ids {
+		out[id] = nil
+		if receiver && err == nil {
+			connected := len(sample[spec.ReverseEmail(id)]) > 0
+			out[id] = &connected
+		}
+	}
+	return out
 }
 
 // onlineEmail turns what GetAllOnlineUsers returns into the email the

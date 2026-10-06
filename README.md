@@ -113,7 +113,7 @@ internal/firewall/    opens bosun's own ports in ufw / firewalld and closes them
 internal/certs/       ACME certificates for inbounds and the panel (HTTP-01 / Cloudflare DNS-01), pushed PEM pairs
 internal/dns/         Cloudflare records for the panel domain, decoy site and TLS inbound names
 internal/decoy/       the node's own HTTPS site on loopback for REALITY to steal
-internal/realityscan/ REALITY target scanner with CDN detection
+internal/realityscan/ REALITY target scanner with CDN and TLS record size checks
 internal/warp/        Cloudflare WARP registration and WireGuard outbound
 internal/shaper/      per-user bandwidth limits with nft connmark + tc
 internal/probe/       latency checks for the panel's status page (carrier probe points, icmp/tcp/http/download tasks), attached to every beat
@@ -946,3 +946,14 @@ apply.
 ## Managed VLESS Reverse
 
 Captain manages multi-transit VLESS Reverse connections with Xray; authentication and accounting stay on the transits, and the exit connects actively. The current tc per-user speed limits do not apply to this multiplexed path. See [the node guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#node-connections-vless-reverse).
+
+Since v0.61.0, REALITY target scans include TLS record size screening. Scans
+run from the selected transit and are also available in
+the standalone inbound editor. In addition to TLS 1.3, h2, X25519, certificate
+and CDN checks, the scanner measures incoming TLS wire records, including
+encrypted overhead and stapled OCSP. A record over the conservative 8192-byte
+limit of the pinned Xray is rejected as a candidate. Older agents without
+record measurements show **Not checked**. This is screening, not an end-to-end
+REALITY test: accumulated records and differences in ClientHello or destination
+edge still require validation with the actual core and client. New result
+fields are additive; existing API clients remain compatible.

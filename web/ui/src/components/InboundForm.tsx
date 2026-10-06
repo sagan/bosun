@@ -300,7 +300,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
                   <TextInput label={t('inbounds.handshakeServer')} placeholder={v.server_name} {...form.getInputProps('handshake_server')} />
                   <NumberInput label={t('inbounds.handshakePort')} {...form.getInputProps('handshake_port')} />
                 </Group>
-                <RealityScan current={v.handshake_server || v.server_name} scan={(hosts) => api.post<RealityResult[]>('/api/reality/scan', { hosts })}
+                <RealityScan current={v.handshake_server || v.server_name} scan={(hosts, signal) => api.post<RealityResult[]>('/api/reality/scan', { hosts }, signal)}
                   onPick={(host) => form.setValues({ server_name: host, handshake_server: host, handshake_port: 443 })} />
                 {decoy && (
                   <Group gap="xs">

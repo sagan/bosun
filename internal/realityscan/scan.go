@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -24,8 +25,9 @@ import (
 // (TLS 1.3, h2, X25519, trusted chain, no CDN, no cross-host redirect)
 // when probed on 2026-09-14, spread over the US, Japan and Europe so a
 // node anywhere finds a nearby one. Deliberately absent: anything Google
-// (a node that answers as Google draws attention), Microsoft (its REALITY
-// gate fails on current xray, and it is overused), the community classic
+// (a node that answers as Google draws attention), Microsoft (OCSP-stapled
+// Certificate records can exceed pinned Xray 26.3.27's 8 KiB REALITY buffer;
+// see XTLS/Xray-core#6356), the community classic
 // www.lovelive-anime.jp (now on CloudFront, and fingerprinted by overuse),
 // and every site fronted by Cloudflare / Akamai / Fastly / CloudFront
 // (nvidia, amd, intel, ibm, amazon, aws, tesla, mozilla, python.org ...).
@@ -68,15 +70,16 @@ var DefaultCandidates = []string{
 
 // Result is one probed target.
 type Result struct {
-	Host      string `json:"host"`
-	Port      int    `json:"port"`
-	IP        string `json:"ip,omitempty"`
-	Feasible  bool   `json:"feasible"`
-	Reason    string `json:"reason,omitempty"`
-	TLS13     bool   `json:"tls13"`
-	H2        bool   `json:"h2"`
-	X25519    bool   `json:"x25519"`
-	CertValid bool   `json:"cert_valid"`
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	IP         string `json:"ip,omitempty"`
+	Feasible   bool   `json:"feasible"`
+	Reason     string `json:"reason,omitempty"`
+	ReasonCode string `json:"reason_code,omitempty"`
+	TLS13      bool   `json:"tls13"`
+	H2         bool   `json:"h2"`
+	X25519     bool   `json:"x25519"`
+	CertValid  bool   `json:"cert_valid"`
 	// CDN names the content network the target sits behind ("cloudflare",
 	// "fastly", "akamai", "cloudfront"); empty means none detected.
 	CDN         string    `json:"cdn,omitempty"`
@@ -93,6 +96,11 @@ type Result struct {
 	// a different SNI than the inbound advertises.
 	HTTPStatus int    `json:"http_status,omitempty"`
 	Redirect   string `json:"redirect,omitempty"`
+	// Observed wire records during this TLS handshake, not certificate DER
+	// length or proof that the entire REALITY handshake will succeed.
+	TLSRecordBytes int   `json:"tls_record_bytes,omitempty"`
+	TLSRecordLimit int   `json:"tls_record_limit,omitempty"`
+	TLSRecordOK    *bool `json:"tls_record_ok,omitempty"`
 }
 
 // Options tune a scan.
@@ -214,9 +222,23 @@ func Probe(ctx context.Context, host string, o Options) Result {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = raw.SetDeadline(dl)
 	}
-	conn := tls.Client(raw, cfg)
-	if err := conn.HandshakeContext(ctx); err != nil {
-		res.Reason = "TLS handshake failed: " + err.Error()
+	records := &recordConn{Conn: raw}
+	conn := tls.Client(records, cfg)
+	handshakeErr := conn.HandshakeContext(ctx)
+	res.TLSRecordBytes = records.maxRecord
+	res.TLSRecordLimit = targetRecordLimit
+	tooLarge := records.maxRecord > targetRecordLimit
+	if tooLarge || (handshakeErr == nil && conn.ConnectionState().Version == tls.VersionTLS13) {
+		ok := !tooLarge && records.maxRecord > 0
+		res.TLSRecordOK = &ok
+	}
+	if handshakeErr != nil {
+		if tooLarge {
+			res.ReasonCode = "tls_record_too_large"
+			res.Reason = fmt.Sprintf("observed TLS record exceeds the REALITY screening limit: %d > %d bytes", records.maxRecord, targetRecordLimit)
+			return res
+		}
+		res.Reason = "TLS handshake failed: " + handshakeErr.Error()
 		return res
 	}
 	cs := conn.ConnectionState()
@@ -255,6 +277,9 @@ func Probe(ctx context.Context, host string, o Options) Result {
 		res.Reason = "server does not negotiate HTTP/2"
 	case !res.X25519:
 		res.Reason = "server did not use X25519 key exchange"
+	case tooLarge:
+		res.ReasonCode = "tls_record_too_large"
+		res.Reason = fmt.Sprintf("observed TLS record exceeds the REALITY screening limit: %d > %d bytes", records.maxRecord, targetRecordLimit)
 	case !res.CertValid:
 		res.Reason = "certificate not trusted"
 		if chainErr != nil {

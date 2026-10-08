@@ -15,6 +15,14 @@ func renderRemote(o spec.Outbound) (m, error) {
 		out["detour"] = o.ProxyTag
 	}
 	switch s.Protocol {
+	case spec.SSH:
+		if r.SSH == nil || r.SSH.HostKey == "" {
+			return nil, fmt.Errorf("SSH remote requires a pinned host key")
+		}
+		out["type"], out["user"], out["password"], out["host_key"] = "ssh", r.Username, r.Password, []string{r.SSH.HostKey}
+		if r.SSH.PrivateKey != "" {
+			out["private_key"] = r.SSH.PrivateKey
+		}
 	case spec.VLESS:
 		out["type"], out["uuid"] = "vless", r.UUID
 		if s.Flow != "" {

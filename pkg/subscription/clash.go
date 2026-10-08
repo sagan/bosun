@@ -118,7 +118,7 @@ func clashProxy(l Line) m {
 		}
 	case spec.Mieru:
 		p["type"] = "mieru"
-		p["username"] = l.UUID
+		p["username"] = proxyUsername(l)
 		p["password"] = l.Password
 		// mihomo takes one transport; BOTH (TCP at port, UDP at port+1) exports the TCP side.
 		p["transport"] = strings.ToUpper(ib.MieruTransport)

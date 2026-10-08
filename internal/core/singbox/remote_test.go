@@ -46,3 +46,16 @@ func TestRenderRemoteOutbounds(t *testing.T) {
 		t.Fatal("mieru remote should be refused")
 	}
 }
+
+func TestSSHRemoteUsesPinnedHostKey(t *testing.T) {
+	host := spec.Inbound{Protocol: spec.SSH}
+	spec.FillInboundSecrets(&host)
+	out, err := renderRemote(spec.Outbound{Tag: "ssh-exit", Remote: &spec.Remote{Host: "example.com", Port: 2222, Username: "proxy", Password: "test-password", Settings: spec.Inbound{Protocol: spec.SSH}, SSH: &spec.SSHClient{HostKey: host.SSH.PublicKey}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(out)
+	if out["type"] != "ssh" || !strings.Contains(string(raw), host.SSH.PublicKey) || strings.Contains(string(raw), "PRIVATE KEY") {
+		t.Fatal("SSH outbound identity or pin missing")
+	}
+}

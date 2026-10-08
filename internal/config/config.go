@@ -39,6 +39,7 @@ type Config struct {
 		EgressAllow     []string              `yaml:"egress_allow"`
 		EgressUpstreams []spec.EgressUpstream `yaml:"egress_upstreams"`
 		Singbox         *SingboxCore          `yaml:"singbox"`
+		SingboxExtended *SingboxCore          `yaml:"singbox_extended"`
 		Xray            *XrayCore             `yaml:"xray"`
 		Mita            *MitaCore             `yaml:"mita"`
 		Hysteria        *HysteriaCore         `yaml:"hysteria"`
@@ -109,7 +110,7 @@ func (c *Config) CoresDir() string { return filepath.Join(c.DataDir, "cores") }
 
 // CoreOrder returns the effective core preference order.
 func (c *Config) CoreOrder() []string {
-	def := []string{"singbox", "xray", "mita", "hysteria", "snell"}
+	def := []string{"singbox", "xray", "mita", "hysteria", "snell", "singbox-extended"}
 	out := append([]string(nil), c.Cores.Order...)
 	for _, d := range def {
 		seen := false
@@ -229,7 +230,7 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
-	if c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil && c.Cores.Snell == nil {
+	if c.Cores.SingboxExtended == nil && c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil && c.Cores.Snell == nil {
 		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria, cores.snell)")
 	}
 	// BOSUN_CAPTAIN / BOSUN_PAIR (the docker one-liner Captain prints) select
@@ -276,7 +277,7 @@ func Load(path string) (*Config, error) {
 	}
 	for _, name := range c.Cores.Order {
 		switch name {
-		case "singbox", "xray", "mita", "hysteria", "snell":
+		case "singbox", "singbox-extended", "xray", "mita", "hysteria", "snell":
 		default:
 			return nil, fmt.Errorf("config: cores.order: unknown core %q", name)
 		}

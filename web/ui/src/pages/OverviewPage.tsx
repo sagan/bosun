@@ -1,7 +1,8 @@
+import { CoreManagementCard, type CoreInventory } from '../components/CoreManagementCard'
 import { ResourcesCard } from '../components/ResourcesCard'
 import { Alert, Badge, Card, SimpleGrid, Skeleton, Table, Text } from '@mantine/core'
 import { AreaChart } from '@mantine/charts'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { IconAlertTriangle, IconDevices, IconPlugConnected, IconArrowsExchange, IconClock, IconInfoCircle } from '@tabler/icons-react'
 import { api, type Status } from '../lib/api'
@@ -18,6 +19,8 @@ function uptime(s: number) {
 
 export default function OverviewPage() {
   const { t } = useTranslation()
+  const qc = useQueryClient()
+  const inventory = useQuery({ queryKey: ['core-management'], queryFn: () => api.get<CoreInventory>('/api/core-management'), refetchInterval: 10_000 })
   const q = useQuery({ queryKey: ['status'], queryFn: () => api.get<Status>('/api/status'), refetchInterval: 5_000 })
   const s = q.data
   const host = s?.host
@@ -53,6 +56,21 @@ export default function OverviewPage() {
         </Card>
       )}
       <ResourcesCard host={host} />
+      <CoreManagementCard inventory={inventory.data} online={!!s?.agent} canWrite={s?.mode === 'local' && !s?.fixed} onAction={async request => {
+        const { id } = await api.post<{ id: string }>('/api/core-management', request)
+        const until = Date.now() + 920_000
+        while (Date.now() < until) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const job = await api.get<{ done_at?: string; error?: string; result: CoreInventory }>(`/api/core-management/jobs/${id}`)
+          if (job.done_at) {
+            if (job.error) throw new Error(job.error)
+            qc.setQueryData(['core-management'], job.result)
+            qc.invalidateQueries({ queryKey: ['core-options'] })
+            return
+          }
+        }
+        throw new Error(t('coreManager.timeout'))
+      }} />
         <Card>
           <Text size="sm" c="dimmed" fw={500} mb="xs">{t('overview.cores')}</Text>
           <Table>

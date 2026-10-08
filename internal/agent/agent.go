@@ -26,6 +26,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/certs"
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/core"
+	"github.com/zeptop-dev/bosun/internal/coreinstall"
 	"github.com/zeptop-dev/bosun/internal/decoy"
 	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"github.com/zeptop-dev/bosun/internal/firewall"
@@ -44,12 +45,15 @@ import (
 const retryFloor = 30 * time.Second
 
 type Agent struct {
-	cfg     *config.Config
-	driver  panel.Driver
-	reg     *core.Registry
-	fwd     *forward.Manager
-	metrics *metrics.Registry
-	log     *slog.Logger
+	CoreManager        *coreinstall.Manager
+	coreChanges        chan coreChange
+	statsCollectionErr error
+	cfg                *config.Config
+	driver             panel.Driver
+	reg                *core.Registry
+	fwd                *forward.Manager
+	metrics            *metrics.Registry
+	log                *slog.Logger
 
 	// started is when this process came up, so checks can tell "nothing
 	// has happened yet" from "something stopped happening".
@@ -244,7 +248,7 @@ func (a *Agent) ForwardStats() []forward.Stats { return a.fwd.Snapshot() }
 
 // New builds an agent. metrics may be nil.
 func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metrics.Registry, log *slog.Logger) *Agent {
-	a := &Agent{cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), started: time.Now(), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), doctorNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
+	a := &Agent{coreChanges: make(chan coreChange), cfg: cfg, driver: driver, reg: reg, fwd: forward.NewManager(log), metrics: mreg, log: log.With("component", "agent"), started: time.Now(), kick: make(chan struct{}, 1), reportNow: make(chan struct{}, 1), doctorNow: make(chan struct{}, 1), jobsDone: map[string]bool{}, jobsRunning: map[string]bool{}}
 	if mreg != nil {
 		a.registerMetrics()
 	}
@@ -363,6 +367,8 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.pullApply(ctx)
 			a.runJobs(ctx)
 			reconfigureBeat()
+		case change := <-a.coreChanges:
+			change.done <- a.activateCore(ctx, change.ctx, change.request)
 		case <-a.reportNow:
 			a.report(ctx)
 		case <-a.doctorNow:

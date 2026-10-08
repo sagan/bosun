@@ -36,6 +36,7 @@ func InboundTemplate(ib Inbound) Inbound {
 	v.Users, v.ScopedUsers = nil, false
 	v.ServerKey, v.ObfsPassword, v.SnellPSK = "", "", ""
 	v.WGPrivateKey, v.WGPublicKey = "", ""
+	v.SSH = nil
 	if v.TLS != nil {
 		v.TLS.CertPath, v.TLS.KeyPath = "", ""
 		if v.TLS.Mode == TLSStandard {
@@ -147,12 +148,19 @@ func validatePresetOutbound(o Outbound) error {
 		if r.Port < 1 || r.Port > 65535 || r.Host == "" || !Plain(r.Host) || strings.ContainsAny(r.Host, " /\\\"'") {
 			return fmt.Errorf("invalid remote host or port")
 		}
-		if r.Settings.ScopedUsers || len(r.Settings.Users) > 0 || r.Settings.WGPrivateKey != "" || r.Settings.SnellPSK != "" || r.Settings.ServerKey != "" {
+		if r.Settings.ScopedUsers || len(r.Settings.Users) > 0 || r.Settings.SSH != nil || r.Settings.WGPrivateKey != "" || r.Settings.SnellPSK != "" || r.Settings.ServerKey != "" {
 			return fmt.Errorf("remote contains server-only credentials")
 		}
 
 		if tls := r.Settings.TLS; tls != nil && (tls.CertPath != "" || tls.KeyPath != "" || tls.Reality != nil && tls.Reality.PrivateKey != "") {
 			return fmt.Errorf("remote contains server-only TLS material")
+		}
+		if r.Settings.Protocol == SSH {
+			if err := r.validateSSH(); err != nil {
+				return err
+			}
+		} else if r.SSH != nil {
+			return fmt.Errorf("SSH client options require an SSH remote")
 		}
 		check := InboundTemplate(r.Settings)
 		check.Tag = "remote"

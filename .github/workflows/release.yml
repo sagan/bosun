@@ -12,7 +12,12 @@ permissions:
   packages: write
 
 jobs:
+  extended-core:
+    uses: ./.github/workflows/singbox-extended.yml
+    with:
+      publish: ${{ github.event_name == 'push' }}
   binaries:
+    needs: extended-core
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

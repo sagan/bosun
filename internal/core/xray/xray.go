@@ -329,3 +329,11 @@ func (c *Core) feedConn(line string) {
 		c.opt.ConnSink(user, ip, host, port, network)
 	}
 }
+
+// Check validates a staged bundle before replacing a running instance.
+func (c *Core) Check(ctx context.Context, b *core.Bundle) error {
+	if err := c.write(b); err != nil {
+		return err
+	}
+	return c.check(ctx, c.configPath(b))
+}

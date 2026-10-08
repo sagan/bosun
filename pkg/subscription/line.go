@@ -122,3 +122,10 @@ func iniName(name string) string {
 	}, name)
 	return strings.TrimSpace(out)
 }
+
+func proxyUsername(l Line) string {
+	if l.Inbound.Protocol == spec.SSH || l.Inbound.Protocol == spec.Mieru && l.Inbound.Core == "singbox-extended" {
+		return spec.ProxyUsername(l.UUID, l.Inbound.Tag)
+	}
+	return l.UUID
+}

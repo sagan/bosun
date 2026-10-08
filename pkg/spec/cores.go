@@ -21,6 +21,8 @@ type CoreCapabilities struct {
 	SnellMultiUser  bool       `json:"snell_multi_user,omitempty"`
 	SnellObfsTLS    bool       `json:"snell_obfs_tls,omitempty"`
 	ShadowTLS       bool       `json:"shadow_tls,omitempty"`
+	// MieruWildcardOnly marks embedded versions without listen IP support.
+	MieruWildcardOnly bool `json:"mieru_wildcard_only,omitempty"`
 }
 
 func (c CoreCapabilities) Supports(ib Inbound) bool { return c.UnsupportedReason(ib) == "" }
@@ -29,6 +31,8 @@ func (c CoreCapabilities) Supports(ib Inbound) bool { return c.UnsupportedReason
 // (keys, addresses, required TLS, etc.) remains Inbound.Validate's job.
 func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
 	switch {
+	case ib.Protocol == Mieru && c.MieruWildcardOnly && ib.Listen != "" && ib.Listen != "::" && ib.Listen != "0.0.0.0":
+		return "listenAddress"
 	case ib.PrivateAccess.Enabled() && (!c.PrivateAccess || ib.Protocol == WireGuard || (ib.Protocol == Snell && !ib.SnellMultiUser) || (c.VLESSReverse && (ib.Protocol == SOCKS || ib.Protocol == HTTP))):
 		return "privateAccess"
 	case ib.Reverse != nil && (!c.VLESSReverse || (!ib.Reverse.Receiver && (ib.Protocol == WireGuard || ib.Protocol == SOCKS || ib.Protocol == HTTP))):
@@ -68,6 +72,7 @@ func CoreCatalog() []CoreCandidate {
 		{"mita", CoreCapabilities{Protocols: []Protocol{Mieru}, HotUserReload: true}},
 		{"hysteria", CoreCapabilities{Protocols: []Protocol{Hysteria2}, HotUserReload: true}},
 		{"snell", CoreCapabilities{Protocols: []Protocol{Snell}, SnellObfsTLS: true}},
+		{"singbox-extended", CoreCapabilities{MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
 	}
 }
 
@@ -104,6 +109,11 @@ func SelectCore(ib Inbound, enabled []CoreCandidate) (string, error) {
 		}
 	}
 	for _, c := range enabled {
+		// Extended Mieru uses distinct login names for per-inbound billing.
+		// Moving to it must be an explicit choice followed by a sub refresh.
+		if ib.Protocol == Mieru && c.Name == "singbox-extended" {
+			continue
+		}
 		if c.Capabilities.Supports(ib) {
 			return c.Name, nil
 		}
@@ -160,6 +170,9 @@ func CoreProbe(q url.Values) Inbound {
 	if q.Get("reality") == "true" {
 		ib.TLS = &TLS{Mode: TLSReality}
 	}
+	if q.Get("bound_listen") == "true" {
+		ib.Listen = "192.0.2.10"
+	}
 	if q.Get("private_access") == "true" {
 		ib.PrivateAccess = &PrivateAccess{Mode: "internal"}
 	}
@@ -173,4 +186,16 @@ func CoreProbe(q url.Values) Inbound {
 		ib.Fallbacks = []Fallback{{}}
 	}
 	return ib
+}
+
+// CheckCoreListen also applies when an ingress supplies an otherwise omitted
+// listen address. An embedded Mieru listener must not silently bind all NICs.
+func (ib Inbound) CheckCoreListen(bindIP string) error {
+	if ib.Listen == "" {
+		ib.Listen = bindIP
+	}
+	if ib.Core == "singbox-extended" && CapabilitiesForCore(ib.Core).UnsupportedReason(ib) == "listenAddress" {
+		return fmt.Errorf("extended Mieru cannot bind a specific IP; select mita instead")
+	}
+	return nil
 }

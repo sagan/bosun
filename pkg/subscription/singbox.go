@@ -90,6 +90,12 @@ func singboxOutbound(l Line) m {
 	ib := l.Inbound
 	o := m{"tag": l.Name, "server": l.Host, "server_port": l.Port}
 	switch ib.Protocol {
+	case spec.SSH:
+		if ib.SSH == nil || ib.SSH.PublicKey == "" {
+			return nil
+		}
+		o["type"], o["user"], o["password"], o["host_key"] = "ssh", proxyUsername(l), l.Password, []string{ib.SSH.PublicKey}
+
 	case spec.VLESS:
 		o["type"] = "vless"
 		o["uuid"] = l.UUID

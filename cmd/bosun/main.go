@@ -153,6 +153,7 @@ type env struct {
 	logs    *logring.Ring
 	driver  panel.Driver // nil for driver "local"
 	reg     *core.Registry
+	manager *coreinstall.Manager
 	inst    *coreinstall.Installer
 	conns   *connlog.Collector
 	audits  *audit.Collector
@@ -212,6 +213,11 @@ func setup(args []string) (*env, error) {
 	if cfg.Cores.RegistryToken != "" {
 		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
 	}
+	manager, err := coreinstall.NewManager(inst, configuredCores(cfg))
+	if err != nil {
+		return nil, err
+	}
+	manager.Factory = managedFactory(cfg, log, sink)
 	// binaryFor returns an explicit path as-is, otherwise the bosun-managed
 	// release, installing it on first use.
 	binaryFor := func(name, explicit, version string) (string, error) {
@@ -300,7 +306,34 @@ func setup(args []string) (*env, error) {
 			return snell.New(snell.Options{Binary: bin, WorkDir: filepath.Join(cfg.DataDir, "snell")}, log)
 		},
 	}
-	for _, name := range cfg.CoreOrder() {
+	build["singbox-extended"] = func() (core.Core, error) {
+		sb := cfg.Cores.SingboxExtended
+		if sb == nil {
+			return nil, nil
+		}
+		bin, err := binaryFor("singbox-extended", sb.Binary, sb.Version)
+		if err != nil {
+			return nil, err
+		}
+		return manager.Factory("singbox-extended", bin, filepath.Join(cfg.DataDir, "singbox-extended"))
+	}
+	selected := manager.Selected()
+	for _, name := range manager.Order(cfg.CoreOrder()) {
+		if selected[name] != "" {
+			if configuredCores(cfg)[name].External {
+				return nil, fmt.Errorf("%s has both a managed selection and an explicit binary; remove one pin", name)
+			}
+			binary, err := inst.Ensure(context.Background(), name, selected[name])
+			if err != nil {
+				return nil, err
+			}
+			c, err := manager.Factory(name, binary, filepath.Join(cfg.DataDir, "core-runtime", name, selected[name]))
+			if err != nil {
+				return nil, err
+			}
+			reg.Register(c)
+			continue
+		}
 		c, err := build[name]()
 		if err != nil {
 			return nil, err
@@ -309,7 +342,7 @@ func setup(args []string) (*env, error) {
 			reg.Register(c)
 		}
 	}
-	return &env{cfgPath: *cfgPath, cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
+	return &env{manager: manager, cfgPath: *cfgPath, cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
 }
 
 func cmdRun(args []string) error {
@@ -377,6 +410,7 @@ func cmdRun(args []string) error {
 	// Headless managed mode without a web panel: the original single agent.
 	if e.driver != nil && cfg.Web == nil {
 		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
+		ag.CoreManager = e.manager
 		ag.Version = version
 		ag.Upgrade = upgradeHook(log, upd)
 		ag.Remove = removalHook(e.cfgPath, cfg, e.driver)
@@ -432,7 +466,7 @@ func cmdRun(args []string) error {
 		st := store.Settings()
 		return telegram.Settings{Token: st.TelegramToken, ChatID: st.TelegramChatID, Notify: st.TelegramNotify}
 	}}
-	sup := &supervisor{cfgPath: e.cfgPath, cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, audits: e.audits, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
+	sup := &supervisor{manager: e.manager, cfgPath: e.cfgPath, cfg: cfg, log: log, reg: e.reg, inst: e.inst, guard: guard, conns: e.conns, audits: e.audits, firewall: fw, extraPorts: extraPorts, mreg: mreg, store: store, fixed: e.driver, upgrade: upgradeHook(log, upd), certs: cm, decoy: dc, bot: bot, shaper: shp,
 		onAgent: func(ag *agent.Agent) { current.Lock(); current.ag = ag; current.Unlock() }}
 	panelUI := ui.New(ui.Deps{
 		Store: store, Version: version, Log: log, Logs: e.logs, Install: e.inst,
@@ -486,6 +520,7 @@ type supervisor struct {
 	cfg     *config.Config
 	log     *slog.Logger
 	reg     *core.Registry
+	manager *coreinstall.Manager
 	inst    *coreinstall.Installer
 	mreg    *metrics.Registry
 	store   *local.Store
@@ -555,6 +590,7 @@ func (s *supervisor) run(ctx context.Context) error {
 			s.mreg.Reset()
 		}
 		ag := agent.New(s.cfg, d, s.reg, s.mreg, s.log)
+		ag.CoreManager = s.manager
 		ag.Version = version
 		ag.Upgrade = s.upgrade
 		ag.Remove = removalHook(s.cfgPath, s.cfg, d)
@@ -841,7 +877,7 @@ func (s *supervisor) telegramStatus(ctx context.Context) string {
 // loopback that can add users, change inbounds and reset counters. The
 // egress guard keeps every local account except root away from them.
 func controlPorts(cfg *config.Config) []int {
-	var out []int
+	out := []int{9101, 9102, 9104, 9105}
 	add := func(addr, def string) {
 		if strings.TrimSpace(addr) == "" {
 			addr = def
@@ -855,6 +891,9 @@ func controlPorts(cfg *config.Config) []int {
 	if cfg.Cores.Singbox != nil {
 		add(cfg.Cores.Singbox.StatsListen, "127.0.0.1:9101")
 	}
+	if cfg.Cores.SingboxExtended != nil {
+		add(cfg.Cores.SingboxExtended.StatsListen, "127.0.0.1:9105")
+	}
 	if cfg.Cores.Xray != nil {
 		add(cfg.Cores.Xray.APIListen, "127.0.0.1:9102")
 	}
@@ -865,7 +904,7 @@ func controlPorts(cfg *config.Config) []int {
 }
 
 func loopbackPorts(cfg *config.Config) []int {
-	var out []int
+	out := []int{9103}
 	if cfg.Cores.Hysteria != nil {
 		if _, port, err := net.SplitHostPort(cfg.Cores.Hysteria.AuthListen); err == nil {
 			if n, err := strconv.Atoi(port); err == nil {

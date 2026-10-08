@@ -262,5 +262,5 @@ func privateAuthName(ib Inbound, u User) string {
 	case SOCKS, HTTP, Naive:
 		return u.Name
 	}
-	return InboundUser(u.Name, ib.Tag)
+	return InboundAuthName(ib, u)
 }

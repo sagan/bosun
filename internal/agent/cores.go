@@ -19,9 +19,15 @@ func (a *Agent) CoreStatus() map[string]agentproto.CoreStatus {
 	a.statusMu.Lock()
 	defer a.statusMu.Unlock()
 	out := map[string]agentproto.CoreStatus{}
+	versions := map[string]string{}
+	if inventory := a.CoreInventory(); inventory != nil {
+		for _, instance := range inventory.Instances {
+			versions[instance.Distribution] = instance.Version
+		}
+	}
 	for priority, c := range a.CoreCandidates() {
 		adapter, _ := a.reg.Get(c.Name)
-		st := agentproto.CoreStatus{Running: adapter.Running(), Capabilities: &c.Capabilities, Priority: priority}
+		st := agentproto.CoreStatus{Version: versions[c.Name], Running: adapter.Running(), Capabilities: &c.Capabilities, Priority: priority}
 		if st.Running {
 			st.Inbounds = append([]string(nil), a.appliedCores[c.Name]...)
 		}

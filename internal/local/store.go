@@ -300,6 +300,9 @@ func validateInbound(ib *Inbound) error {
 	if ib.Protocol == spec.Mieru {
 		ib.MieruTransport = strings.ToUpper(strings.TrimSpace(ib.MieruTransport))
 	}
+	if err := ib.Inbound.EnsureSSHKey(); err != nil {
+		return err
+	}
 	if err := ib.Inbound.Validate(); err != nil {
 		return err
 	}
@@ -348,9 +351,6 @@ func validateInbound(ib *Inbound) error {
 // PutInbound creates or replaces an inbound. prevTag names the inbound being
 // edited when its tag changes ("" for create).
 func (s *Store) PutInbound(ib Inbound, prevTag string) error {
-	if err := validateInbound(&ib); err != nil {
-		return err
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	idx := -1
@@ -368,11 +368,23 @@ func (s *Store) PutInbound(ib Inbound, prevTag string) error {
 	if prevTag != "" && idx < 0 {
 		return ErrNotFound
 	}
+	if idx >= 0 && ib.Protocol == spec.SSH && ib.SSH == nil {
+		ib.SSH = s.st.Inbounds[idx].SSH
+	}
+	if err := validateInbound(&ib); err != nil {
+		return err
+	}
 	if err := checkIngressListener(s.st.Ingresses, ib.IngressID, ib.Listen, ib.Port); err != nil {
+		return err
+	}
+	if err := ib.Inbound.CheckCoreListen(""); err != nil {
 		return err
 	}
 	if ib.IngressID != "" {
 		g, _ := s.ingressLocked(ib.IngressID)
+		if err := ib.Inbound.CheckCoreListen(g.BindIP); err != nil {
+			return err
+		}
 		if err := g.Ports().CheckInbound(ib.Inbound); err != nil {
 			return err
 		}

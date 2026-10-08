@@ -32,10 +32,13 @@ type Asset struct {
 // the fallback when no Asset exists for the platform, and the only option for
 // sing-box because upstream release binaries omit the stats API bosun needs.
 type Build struct {
-	Package string   // e.g. github.com/sagernet/sing-box/cmd/sing-box
-	Version string   // module version, e.g. v1.14.0
-	Tags    []string // build tags
-	LDFlags string   // extra -ldflags, e.g. to stamp the version string
+	Repository string   // optional pinned Git source when a fork retains the upstream module path
+	Commit     string   // exact commit required for Repository builds
+	Modules    []string // vetted dependency security updates for source builds
+	Package    string   // e.g. github.com/sagernet/sing-box/cmd/sing-box
+	Version    string   // module version, e.g. v1.14.0
+	Tags       []string // build tags
+	LDFlags    string   // extra -ldflags, e.g. to stamp the version string
 }
 
 // Release is one upstream version of one core.
@@ -50,13 +53,14 @@ type Release struct {
 
 // Binary is the executable file name per core.
 var Binary = map[string]string{
-	"geocheck": "geocheck", // optional diagnostic tool; intentionally absent from the core manifest
-	"singbox":  "sing-box",
-	"xray":     "xray",
-	"mita":     "mita",
-	"hysteria": "hysteria",
-	"snell":    "snell-server",
-	"realm":    "realm",
+	"geocheck":         "geocheck", // optional diagnostic tool; intentionally absent from the core manifest
+	"singbox":          "sing-box",
+	"singbox-extended": "sing-box",
+	"xray":             "xray",
+	"mita":             "mita",
+	"hysteria":         "hysteria",
+	"snell":            "snell-server",
+	"realm":            "realm",
 }
 
 var singboxTags = []string{"with_quic", "with_utls", "with_clash_api", "with_v2ray_api", "with_gvisor", "with_acme", "with_wireguard"}
@@ -81,6 +85,15 @@ func xrayCI(version, arch string) Asset {
 
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
+	{
+		Core: "singbox-extended", Version: "1.14.1-extended-2.7.2-r1", Status: StatusCaution,
+		Note: "shtorm-7 extended 2.7.2, pinned source, with_v2ray_api; Mieru requires explicit selection and subscription refresh; wildcard listen only",
+		Assets: map[string]Asset{
+			"linux/amd64": extendedCI("amd64"), "linux/arm64": extendedCI("arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/shtorm-7/sing-box-extended.git", Commit: "55faa763f986f4ca8a492d9b2719bc6330d2bef5",
+			Modules: []string{"golang.org/x/crypto@v0.56.0", "golang.org/x/text@v0.41.0", "golang.org/x/mod@v0.40.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0"}, Package: "./cmd/sing-box", Version: "v1.14.1-extended-2.7.2", Tags: singboxTags, LDFlags: "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.14.1-extended-2.7.2"},
+	},
 	{
 		// -r2: the same upstream v1.14.1 rebuilt with Go 1.26.8; -r1 was
 		// compiled with Go 1.26.0 and missed the crypto/tls and net/http
@@ -310,4 +323,9 @@ func Default(core string) (Release, bool) {
 		}
 	}
 	return Release{}, false
+}
+
+func extendedCI(arch string) Asset {
+	base := RegistryBase + "singbox-extended-1.14.1-extended-2.7.2-r1/"
+	return Asset{URL: base + "sing-box-extended-linux-" + arch, SumsURL: base + "SHA256SUMS", Archive: "raw"}
 }

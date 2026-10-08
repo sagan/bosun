@@ -26,6 +26,7 @@ const (
 	Hysteria2   Protocol = "hysteria2"
 	TUIC        Protocol = "tuic"
 	AnyTLS      Protocol = "anytls"
+	SSH         Protocol = "ssh" // SSH direct-tcpip proxy; no system login or shell
 	Mieru       Protocol = "mieru"
 	Snell       Protocol = "snell" // snell-server (one shared PSK) or sing-box multi-user (SnellMultiUser)
 	SOCKS       Protocol = "socks"
@@ -164,6 +165,7 @@ type Brutal struct {
 
 // Inbound is one listener. A node may run many, possibly on different cores.
 type Inbound struct {
+	SSH           *SSHServer      `json:"ssh,omitempty"`
 	PrivateAccess *PrivateAccess  `json:"private_access,omitempty"`
 	Reverse       *ReverseInbound `json:"reverse,omitempty"`
 	Tag           string          `json:"tag,omitempty"`
@@ -291,7 +293,7 @@ func CheckOverride(core string, patch json.RawMessage) error {
 	if err := json.Unmarshal(patch, &over); err != nil {
 		return fmt.Errorf("config override is not a JSON object: %w", err)
 	}
-	for _, k := range deniedOverrideKeys[core] {
+	for _, k := range deniedOverrideKeys[CoreFamily(core)] {
 		if _, has := over[k]; has {
 			return fmt.Errorf("%s override may not set %q", core, k)
 		}
@@ -390,13 +392,14 @@ type WARPAccount struct {
 // Remote is a proxy server to dial out through (a "landing" node), in the
 // same vocabulary as Inbound so a share link maps onto it directly.
 type Remote struct {
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	UUID        string `json:"uuid,omitempty"`        // vless/vmess/tuic
-	Password    string `json:"password,omitempty"`    // trojan/ss/hysteria2/tuic/anytls/socks/http
-	Username    string `json:"username,omitempty"`    // socks/http
-	Insecure    bool   `json:"insecure,omitempty"`    // skip certificate verification
-	Fingerprint string `json:"fingerprint,omitempty"` // uTLS fingerprint, default "chrome" when TLS is on
+	SSH         *SSHClient `json:"ssh,omitempty"`
+	Host        string     `json:"host"`
+	Port        int        `json:"port"`
+	UUID        string     `json:"uuid,omitempty"`        // vless/vmess/tuic
+	Password    string     `json:"password,omitempty"`    // trojan/ss/hysteria2/tuic/anytls/socks/http
+	Username    string     `json:"username,omitempty"`    // socks/http
+	Insecure    bool       `json:"insecure,omitempty"`    // skip certificate verification
+	Fingerprint string     `json:"fingerprint,omitempty"` // uTLS fingerprint, default "chrome" when TLS is on
 	// Settings carries Protocol, TLS (ServerName, Mode, Reality.PublicKey +
 	// ShortIDs), Transport, Multiplex, Flow, Cipher, Obfs..., i.e. the
 	// client-relevant subset of an Inbound.

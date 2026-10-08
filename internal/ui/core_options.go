@@ -17,6 +17,14 @@ func (s *Server) coreOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) checkInboundCore(ib local.Inbound) error {
+	if ib.Protocol == spec.Mieru && ib.Core == "singbox-extended" && s.d.Store.Settings().MitaQuotas {
+		return fmt.Errorf("extended Mieru does not support mita native quotas; disable native quotas or select mita")
+	}
+	if ib.Listen == "" && ib.IngressID != "" {
+		if g, ok := s.d.Store.Ingress(ib.IngressID); ok {
+			ib.Listen = g.BindIP
+		}
+	}
 	if ib.PrivateAccess.Enabled() {
 		a := s.currentAgent()
 		if a == nil {

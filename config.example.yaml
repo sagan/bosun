@@ -21,6 +21,9 @@ cores:
   singbox:
     stats_listen: 127.0.0.1:9101
     log_level: warn
+  # singbox_extended:         # optional; or enable through Core management
+  #   version: "1.14.1-extended-2.7.2-r1"
+  #   stats_listen: 127.0.0.1:9105  # separate from the official singbox instance
   xray:                      # optional; the only core for xhttp, hot user add/remove on vless/vmess/trojan
     version: "26.3.27"       # 26.9.9 breaks REALITY for mihomo/sing-box clients; a bare
                              # upstream version uses bosun's newest tested rebuild (26.3.27-r1)

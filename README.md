@@ -1053,3 +1053,7 @@ Use `{"mode":"internal"}` for the preset and `{"mode":"off"}` to disable.
 Older API clients that omit or send null for this field preserve an existing
 policy. Templates do not export private permissions; applying a preset retains
 the destination inbound's current permission. No database migration is needed.
+
+### Download and switch proxy cores
+
+Use **Overview → Core management** in standalone mode, or the corresponding card in Captain's node details. Download and activation are separate; versions come from the node's reviewed catalog. Official sing-box and sing-box Extended can coexist. Extended Mieru and SSH proxy support, subscription caveats and rollback behavior are documented in [Core management](docs/CORE_MANAGEMENT.md).

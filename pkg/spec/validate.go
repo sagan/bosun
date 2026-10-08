@@ -69,7 +69,7 @@ func (i Inbound) Validate() error {
 		if i.Protocol != Shadowsocks {
 			return fmt.Errorf("shadow_tls wraps a shadowsocks inbound (got %s)", i.Protocol)
 		}
-		if i.Core != "" && i.Core != "singbox" {
+		if i.Core != "" && CoreFamily(i.Core) != "singbox" {
 			return fmt.Errorf("shadow_tls is served by sing-box; core %q cannot", i.Core)
 		}
 		host, port := i.ShadowTLS.HandshakeHostPort()
@@ -84,6 +84,10 @@ func (i Inbound) Validate() error {
 		}
 	}
 	switch i.Protocol {
+	case SSH:
+		if err := i.validateSSH(); err != nil {
+			return err
+		}
 	case VLESS, VMess, Trojan, HTTP, SOCKS:
 	case Shadowsocks:
 		if strings.TrimSpace(i.Cipher) == "" {

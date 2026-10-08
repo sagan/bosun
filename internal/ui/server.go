@@ -66,6 +66,7 @@ type Deps struct {
 
 // Server is the panel HTTP handler.
 type Server struct {
+	coreOps map[string]coreOperation
 	sampler sysinfo.Sampler
 	d       Deps
 	mux     *http.ServeMux
@@ -162,6 +163,9 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/diagnostics/network", auth(s.local(s.networkDiagnostic)))
 	m.HandleFunc("GET /api/logs", auth(s.logs))
 	m.HandleFunc("GET /api/cores", auth(s.cores))
+	m.HandleFunc("GET /api/core-management", auth(s.coreInventory))
+	m.HandleFunc("POST /api/core-management", auth(s.local(s.manageCore)))
+	m.HandleFunc("GET /api/core-management/jobs/{job}", auth(s.coreOperation))
 
 	m.HandleFunc("GET /api/inbounds/core-options", auth(s.coreOptions))
 	m.HandleFunc("GET /api/inbounds", auth(s.listInbounds))

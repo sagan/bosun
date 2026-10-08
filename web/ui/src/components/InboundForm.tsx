@@ -14,7 +14,7 @@ import { RealityScan, type RealityResult } from './RealityScan'
 import { toast } from '../lib/notify'
 import { IngressFields, clientHost, emptyIngress, ingressPayload, type IngressValues } from './IngressFields'
 
-const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'mieru', 'snell', 'socks', 'http', 'naive', 'wireguard']
+const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria2', 'tuic', 'anytls', 'ssh', 'mieru', 'snell', 'socks', 'http', 'naive', 'wireguard']
 const transports = ['tcp', 'ws', 'grpc', 'httpupgrade', 'http', 'xhttp']
 const ciphers = ['2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305', 'aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'none']
 
@@ -166,8 +166,9 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   const v = form.values
   let coreInbound: Record<string, unknown> | undefined
   try { coreInbound = toInbound(v) } catch { /* JSON validation explains the error */ }
-  const coreSelection = useCoreSelection('/api/inbounds/core-options', coreInbound, v.core)
   const selectedIngress = ingresses.find((g) => g.id === v.ingress_id)
+  if (coreInbound && !coreInbound.listen) coreInbound.listen = selectedIngress?.bind_ip ?? ''
+  const coreSelection = useCoreSelection('/api/inbounds/core-options', coreInbound, v.core)
   const firstFree = (g: Ingress) => firstFreeIngressPort(g, usedPorts)
   useEffect(() => { if ((lineOnly || ingresses.some(g => g.require_ingress)) && !initial.ingress_id && !initial.tag && ingresses[0]) form.setValues({ ingress_id: ingresses[0].id, port: firstFree(ingresses[0]) || form.values.port }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const onIngress = (val: string | null) => {
@@ -258,6 +259,8 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
           <Switch mt={24} label={t('inbounds.enabled')} {...form.getInputProps('enabled', { type: 'checkbox' })} />
         </Group>
         <Select label={t('inbounds.core')} allowDeselect={false} {...form.getInputProps('core')} {...coreSelection.selectProps} />
+        {v.protocol === 'ssh' && <Text size="sm" c="dimmed">{t('coreManager.sshHint')}</Text>}
+        {v.protocol === 'mieru' && v.core === 'singbox-extended' && <Text size="sm" c="orange">{t('coreManager.extendedHint')}</Text>}
 
         {(tlsCapable || quic) && (
           <Card p="sm">

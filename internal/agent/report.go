@@ -51,6 +51,7 @@ var errSkip = errors.New("no such counters")
 // them summed per user (for drivers that only know users) and per user and
 // inbound (for the Captain report).
 func (a *Agent) collectUserTraffic(ctx context.Context) (perUser, perInbound []spec.UserTraffic) {
+	a.statsCollectionErr = nil
 	totals := a.pendingTraffic
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
@@ -59,6 +60,7 @@ func (a *Agent) collectUserTraffic(ctx context.Context) (perUser, perInbound []s
 		}
 		stats, err := c.Stats(ctx, true)
 		if err != nil {
+			a.statsCollectionErr = errors.Join(a.statsCollectionErr, err)
 			a.log.Warn("stats failed", "core", name, "err", err)
 			continue
 		}
@@ -135,7 +137,7 @@ func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traff
 func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) agentproto.Report {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rep := agentproto.Report{Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
+	rep := agentproto.Report{CoreInventory: a.CoreInventory(), Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
 	a.statusMu.Lock()
 	rep.Doctor = a.pendingDoctor
 	a.statusMu.Unlock()

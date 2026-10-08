@@ -93,6 +93,7 @@ type Report struct {
 	Online               map[string][]string   `json:"online,omitempty"` // user name -> client IPs
 	Forwards             []ForwardStatus       `json:"forwards,omitempty"`
 	Cores                map[string]CoreStatus `json:"cores,omitempty"`
+	CoreInventory        *spec.CoreInventory   `json:"core_inventory,omitempty"`
 	Certs                []CertStatus          `json:"certs,omitempty"`
 	Host                 spec.SystemStatus     `json:"host"`
 	// Doctor is the node's latest self-check, sent when it changed and at

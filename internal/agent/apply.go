@@ -186,23 +186,18 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		a.log.Warn("inbound skipped", "inbound", tag, "reason", reason)
 		skipped = withSkip(skipped, tag, reason)
 	}
-	// mita refuses to start with an empty user list ("no user found"); on
-	// a fresh node the inbounds usually arrive before the first grant, so
-	// wait for users instead of failing the apply.
-	for _, ib := range assign["mita"] {
-		if len(ib.EffectiveUsers(a.users)) == 0 {
-			a.log.Info("inbound waits for users", "inbound", ib.Tag, "core", "mita")
-			skipped = withSkip(skipped, ib.Tag, "waiting for users (mita cannot start without any)")
-		}
-	}
-	if len(assign["mita"]) > 0 {
-		kept := assign["mita"][:0:0]
-		for _, ib := range assign["mita"] {
-			if _, skip := skipped[ib.Tag]; !skip {
-				kept = append(kept, ib)
+	// Some authenticated servers reject an empty user list. Keep their
+	// listeners idle until a grant arrives, without failing other inbounds.
+	for name, list := range assign {
+		kept := list[:0:0]
+		for _, ib := range list {
+			if coreWaitsForUsers(name, ib) && len(ib.EffectiveUsers(a.users)) == 0 {
+				skipped = withSkip(skipped, ib.Tag, "waiting for users (core cannot start without any)")
+				continue
 			}
+			kept = append(kept, ib)
 		}
-		assign["mita"] = kept
+		assign[name] = kept
 	}
 	a.setStatus(func(s *Status) { s.Skipped = skipped })
 	node := a.node
@@ -603,4 +598,8 @@ func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) error {
 		return applyErr
 	}
 	return nil
+}
+
+func coreWaitsForUsers(name string, ib spec.Inbound) bool {
+	return name == "mita" || name == "singbox-extended" && (ib.Protocol == spec.Mieru || ib.Protocol == spec.SSH)
 }

@@ -30,10 +30,11 @@ import (
 
 // Options configures the sing-box adapter.
 type Options struct {
-	Binary      string // path to the sing-box executable
-	WorkDir     string // where config.json is written
-	StatsListen string // v2ray_api listen address, e.g. 127.0.0.1:9101
-	LogLevel    string
+	Distribution string // empty = official singbox; singbox-extended is a separate instance
+	Binary       string // path to the sing-box executable
+	WorkDir      string // where config.json is written
+	StatsListen  string // v2ray_api listen address, e.g. 127.0.0.1:9101
+	LogLevel     string
 	// ConnSink receives each accepted connection parsed from the log
 	// (user "name|tag", client IP, destination); nil = off.
 	ConnSink func(user, clientIP, host string, port int, network string)
@@ -44,16 +45,24 @@ type Core struct {
 	opt Options
 	log *slog.Logger
 
-	mu      sync.Mutex
-	sup     *subprocess.Supervisor
-	conn    *grpc.ClientConn
-	applied []byte // the config the running process was started with
+	mu             sync.Mutex
+	sup            *subprocess.Supervisor
+	conn           *grpc.ClientConn
+	aliases        map[string]string // wire login -> immutable accounting name
+	inboundAliases map[string]string // internal UDP listener -> logical inbound
+	applied        []byte            // the config the running process was started with
 
 	online *onlineTracker // client IPs per user, from the log (see online.go)
 }
 
 // New returns an adapter; the binary must exist but is not started.
 func New(opt Options, log *slog.Logger) (*Core, error) {
+	if opt.Distribution == "" {
+		opt.Distribution = "singbox"
+	}
+	if opt.Distribution != "singbox" && opt.Distribution != "singbox-extended" {
+		return nil, fmt.Errorf("unknown sing-box distribution")
+	}
 	if opt.Binary == "" {
 		return nil, fmt.Errorf("singbox: binary path is required")
 	}
@@ -65,6 +74,9 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	}
 	if opt.StatsListen == "" {
 		opt.StatsListen = "127.0.0.1:9101"
+		if opt.Distribution == "singbox-extended" {
+			opt.StatsListen = "127.0.0.1:9105"
+		}
 	}
 	if opt.LogLevel == "" {
 		opt.LogLevel = "info"
@@ -77,23 +89,44 @@ func New(opt Options, log *slog.Logger) (*Core, error) {
 	if err := runas.MkdirRoot(opt.WorkDir); err != nil {
 		return nil, err
 	}
-	return &Core{opt: opt, log: log.With("core", "singbox"), online: newOnlineTracker(opt.ConnSink)}, nil
+	c := &Core{opt: opt, log: log.With("core", opt.Distribution)}
+	c.online = newOnlineTracker(func(user, clientIP, host string, port int, network string) {
+		c.mu.Lock()
+		mapped := c.aliases[user]
+		c.mu.Unlock()
+		if mapped != "" {
+			user = mapped
+		}
+		if opt.ConnSink != nil {
+			opt.ConnSink(user, clientIP, host, port, network)
+		}
+	})
+	return c, nil
 }
 
-func (c *Core) Name() string { return "singbox" }
+func (c *Core) Name() string { return c.opt.Distribution }
 
 // Capabilities lists what an unmodified upstream sing-box can serve. mieru is
 // deliberately absent: upstream sing-box has no mieru inbound.
 func (c *Core) Capabilities() core.Capabilities {
-	return spec.CapabilitiesForCore("singbox")
+	return spec.CapabilitiesForCore(c.Name())
 }
 
 func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.User) (*core.Bundle, error) {
 	// The log tracker only believes lines naming a user this node serves.
 	names := map[string]bool{}
+	aliases := map[string]string{}
+	inboundAliases := map[string]string{}
 	for _, ib := range inbounds {
+		if !c.Capabilities().Supports(ib) {
+			return nil, fmt.Errorf("%s: incompatible inbound %q", c.Name(), ib.Tag)
+		}
+		if ib.Protocol == spec.Mieru && strings.EqualFold(ib.MieruTransport, "BOTH") {
+			inboundAliases[mieruUDPTag(ib.Tag)] = ib.Tag
+		}
 		for _, u := range ib.EffectiveUsers(users) {
-			names[spec.InboundUser(u.Name, ib.Tag)] = true
+			names[spec.InboundAuthName(ib, u)] = true
+			aliases[spec.InboundAuthName(ib, u)] = spec.InboundUser(u.Name, ib.Tag)
 			names[u.Name] = true
 		}
 	}
@@ -107,10 +140,13 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 			break
 		}
 	}
-	cfg, err := render(node, inbounds, users, renderOptions{LogLevel: effectiveLogLevel(c.opt.LogLevel, limited), StatsListen: c.opt.StatsListen})
+	cfg, err := render(node, inbounds, users, renderOptions{Distribution: c.Name(), LogLevel: effectiveLogLevel(c.opt.LogLevel, limited), StatsListen: c.opt.StatsListen})
 	if err != nil {
 		return nil, err
 	}
+	c.mu.Lock()
+	c.aliases, c.inboundAliases = aliases, inboundAliases
+	c.mu.Unlock()
 	return &core.Bundle{Files: map[string][]byte{"config.json": cfg}, Main: "config.json"}, nil
 }
 
@@ -128,7 +164,7 @@ func (c *Core) write(b *core.Bundle) error {
 
 // check runs `sing-box check` so a bad config never takes the process down.
 func (c *Core) check(ctx context.Context, path string) error {
-	cmd := exec.CommandContext(ctx, c.opt.Binary, "check", "-c", path)
+	cmd := exec.CommandContext(ctx, c.opt.Binary, "check", "-c", path, "--disable-color")
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	if err := cmd.Run(); err != nil {
@@ -235,7 +271,10 @@ func (c *Core) Stats(ctx context.Context, reset bool) (map[string]spec.Traffic, 
 	}
 	conn := c.conn
 	c.mu.Unlock()
-	return queryUserStats(ctx, conn, reset)
+	stats, err := queryUserStats(ctx, conn, reset)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return translateTraffic(stats, c.aliases), err
 }
 
 // InboundStats implements core.InboundStatser.
@@ -251,7 +290,10 @@ func (c *Core) InboundStats(ctx context.Context, reset bool) (map[string]spec.Tr
 	}
 	conn := c.conn
 	c.mu.Unlock()
-	return v2stats.QueryInbounds(ctx, conn, queryStatsMethod, "inbound>>>", reset)
+	stats, err := v2stats.QueryInbounds(ctx, conn, queryStatsMethod, "inbound>>>", reset)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return translateTraffic(stats, c.inboundAliases), err
 }
 
 // OutboundStats implements core.OutboundStatser.
@@ -285,5 +327,37 @@ func effectiveLogLevel(configured string, limited bool) string {
 
 // Online implements core.OnlineTracker.
 func (c *Core) Online(_ context.Context) (map[string][]string, error) {
-	return c.online.online(), nil
+	online := c.online.online()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := map[string][]string{}
+	for name, ips := range online {
+		if mapped := c.aliases[name]; mapped != "" {
+			name = mapped
+		}
+		out[name] = append(out[name], ips...)
+	}
+	return out, nil
+}
+
+// Check validates a staged bundle without stopping the currently active core.
+func (c *Core) Check(ctx context.Context, b *core.Bundle) error {
+	if err := c.write(b); err != nil {
+		return err
+	}
+	return c.check(ctx, c.configPath(b))
+}
+
+func translateTraffic(in map[string]spec.Traffic, aliases map[string]string) map[string]spec.Traffic {
+	out := map[string]spec.Traffic{}
+	for key, v := range in {
+		if name := aliases[key]; name != "" {
+			key = name
+		}
+		old := out[key]
+		old.Up += v.Up
+		old.Down += v.Down
+		out[key] = old
+	}
+	return out
 }

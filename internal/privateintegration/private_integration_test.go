@@ -46,9 +46,18 @@ func TestPrivateAccessLinuxCores(t *testing.T) {
 			t.Setenv(env, binary)
 		}
 	}
-	for _, kind := range []string{"singbox", "singbox-shadowtls", "xray", "xray-reverse"} {
+	kinds := []string{"singbox", "singbox-shadowtls", "xray", "xray-reverse"}
+	if os.Getenv("BOSUN_EXTENDED_TEST_BINARY") != "" {
+		kinds = append(kinds, "singbox-extended", "singbox-extended-ssh")
+	}
+	for _, kind := range kinds {
 		t.Run(kind, func(t *testing.T) {
 			binary := os.Getenv("BOSUN_SINGBOX_TEST_BINARY")
+			distribution := "singbox"
+			if strings.HasPrefix(kind, "singbox-extended") {
+				binary = os.Getenv("BOSUN_EXTENDED_TEST_BINARY")
+				distribution = "singbox-extended"
+			}
 			if !strings.HasPrefix(kind, "singbox") {
 				binary = os.Getenv("BOSUN_XRAY_TEST_BINARY")
 			}
@@ -75,7 +84,7 @@ func TestPrivateAccessLinuxCores(t *testing.T) {
 			if !strings.HasPrefix(kind, "singbox") {
 				adapter, err = xray.New(xray.Options{Binary: bin, WorkDir: dir, APIListen: "127.0.0.1:19102", LogLevel: "debug"}, slog.Default())
 			} else {
-				adapter, err = singbox.New(singbox.Options{Binary: bin, WorkDir: dir, StatsListen: "127.0.0.1:19102"}, slog.Default())
+				adapter, err = singbox.New(singbox.Options{Distribution: distribution, Binary: bin, WorkDir: dir, StatsListen: "127.0.0.1:19102"}, slog.Default())
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -104,6 +113,22 @@ func TestPrivateAccessLinuxCores(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if kind == "singbox-extended-ssh" {
+				clientIns, clientOuts, clientRoutes := []any{}, []any{}, []any{}
+				for i := range node.Inbounds {
+					ib := &node.Inbounds[i]
+					ib.Protocol, ib.Core, ib.Port = spec.SSH, "singbox-extended", 31300+i
+					spec.FillInboundSecrets(ib)
+					clientIns = append(clientIns, map[string]any{"type": "vless", "tag": ib.Tag, "listen": "127.0.0.1", "listen_port": 30200 + i, "users": []any{map[string]any{"uuid": "11111111-1111-4111-8111-111111111111"}}})
+					clientOuts = append(clientOuts, map[string]any{"type": "ssh", "tag": "ssh-" + ib.Tag, "server": "127.0.0.1", "server_port": ib.Port, "user": spec.ProxyUsername("11111111-1111-4111-8111-111111111111", ib.Tag), "password": "proxy-test-password", "host_key": []string{ib.SSH.PublicKey}})
+					clientRoutes = append(clientRoutes, map[string]any{"inbound": []string{ib.Tag}, "outbound": "ssh-" + ib.Tag})
+				}
+				raw, _ := json.Marshal(map[string]any{"log": map[string]any{"level": "warn"}, "inbounds": clientIns, "outbounds": clientOuts, "route": map[string]any{"rules": clientRoutes}})
+				clientConfig = filepath.Join(dir, "ssh-client.json")
+				if err = os.WriteFile(clientConfig, raw, 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if kind == "xray-reverse" {
 				node.Inbounds = nil
 				node.UserSpeedLimitMbps = 0
@@ -117,7 +142,7 @@ func TestPrivateAccessLinuxCores(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					bundle, err := a.Render(aNode, aNode.Inbounds, []spec.User{{ID: 1, Name: "user", UUID: "11111111-1111-4111-8111-111111111111"}})
+					bundle, err := a.Render(aNode, aNode.Inbounds, []spec.User{{ID: 1, Name: "user", UUID: "11111111-1111-4111-8111-111111111111", Password: "proxy-test-password"}})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -129,7 +154,7 @@ func TestPrivateAccessLinuxCores(t *testing.T) {
 					node.ReverseClients = append(node.ReverseClients, spec.ReverseClient{ID: id, Host: "127.0.0.1", Port: 31200 + i, UUID: control.Reverse.UUID, PrivateAccess: ib.PrivateAccess})
 				}
 			}
-			users := []spec.User{{ID: 1, Name: "user", UUID: "11111111-1111-4111-8111-111111111111"}}
+			users := []spec.User{{ID: 1, Name: "user", UUID: "11111111-1111-4111-8111-111111111111", Password: "proxy-test-password"}}
 			bundle, err := adapter.Render(node, node.Inbounds, users)
 			if err != nil {
 				t.Fatal(err)
@@ -201,7 +226,7 @@ def serve(sock,udp):
    threading.Thread(target=echo,args=(conn,),daemon=True).start()
 for addr in ['10.10.0.2','10.10.0.3','fd42::2','192.0.0.9','100.100.100.200','fd00:ec2::254']:
  for port in [18080,18081,18082]:
-  for udp in [False,True]:
+  for udp in ([False] if c['kind']=='singbox-extended-ssh' else [False,True]):
    sock=socket.socket(socket.AF_INET6 if ':' in addr else socket.AF_INET,socket.SOCK_DGRAM if udp else socket.SOCK_STREAM)
    sock.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1);sock.bind((addr,port))
    if not udp:sock.listen()
@@ -277,7 +302,7 @@ try:
    try:sock=connect(30200,'10.10.0.2',18080);sock.close();break
    except (OSError,AssertionError):time.sleep(.25)
   else:raise AssertionError('transport did not connect')
- for udp in [False,True]:
+ for udp in ([False] if c['kind']=='singbox-extended-ssh' else [False,True]):
   for addr in ['10.10.0.2','fd42::2','allowed.example.com']:
    probe(30200,addr,18080,True,udp);probe(30201,addr,18080,False,udp)
   if c['marks']:
@@ -288,14 +313,15 @@ try:
  helper('stats')
  if c['marks']:
   check_shaped()
- tcp=connect(30200,'10.10.0.2',18080);udp=connect(30200,'10.10.0.2',18080,True)
+ flows=[(connect(30200,'10.10.0.2',18080),b'next')]
+ if c['kind']!='singbox-extended-ssh':flows.append((connect(30200,'10.10.0.2',18080,True),b'\x00\x04next'))
  run('nft','-f','-',input='delete table inet bosun_egress\n'+c['revoked'])
- for sock,payload in [(tcp,b'next'),(udp,b'\x00\x04next')]:
+ for sock,payload in flows:
   sock.sendall(payload)
   try:data=sock.recv(100);assert not data,'revoked existing connection still passes'
   except socket.timeout:pass
   sock.close()
- print(c['kind']+': real TCP/UDP IPv4/IPv6, same-user dual inbound, DNS private targets, protocol/port bounds, public egress, control API/metadata isolation, subscriber counters, tc class mapping and established-flow revocation passed')
+ print(c['kind']+': supported transports, IPv4/IPv6, same-user dual inbound, DNS private targets, protocol/port bounds, public egress, control API/metadata isolation, subscriber counters, tc class mapping and established-flow revocation passed')
 except BaseException:
  log.flush();log.seek(0);print(log.read()[-12000:]);raise
 finally:
@@ -349,7 +375,11 @@ func TestPrivateFixtureHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	traffic := counters[spec.InboundUser("user", "allowed")]
+	accountingName := spec.InboundUser("user", "allowed")
+	if c.Kind == "singbox-extended-ssh" {
+		accountingName = spec.ProxyUsername("11111111-1111-4111-8111-111111111111", "allowed")
+	}
+	traffic := counters[accountingName]
 	if traffic.Up <= 0 || traffic.Down <= 0 {
 		t.Fatalf("subscriber accounting missing: %v", counters)
 	}

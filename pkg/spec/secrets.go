@@ -17,6 +17,9 @@ import (
 func FillInboundSecrets(ib *Inbound) {
 	s := ib
 	switch ib.Protocol {
+	case SSH:
+		// Invalid supplied keys are rejected by Validate; never silently replace them.
+		_ = ib.EnsureSSHKey()
 	case Shadowsocks:
 		if n := SS2022KeyLen(s.Cipher); n > 0 && strings.TrimSpace(s.ServerKey) == "" {
 			s.ServerKey = base64.StdEncoding.EncodeToString(randomBytes(n))

@@ -16,8 +16,9 @@ import (
 type m = map[string]any
 
 type renderOptions struct {
-	LogLevel    string
-	StatsListen string
+	Distribution string
+	LogLevel     string
+	StatsListen  string
 }
 
 // render produces a sing-box JSON configuration for the given inbounds.
@@ -34,7 +35,10 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	for _, ib := range inbounds {
 		ibUsers := ib.EffectiveUsers(users)
 		for _, u := range ibUsers {
-			n := spec.InboundUser(u.Name, ib.Tag)
+			if ib.Protocol == spec.Mieru && u.QuotaBytes > 0 && u.QuotaDays > 0 {
+				return nil, fmt.Errorf("extended Mieru does not support mita native quotas; disable mita native quotas or keep using mita")
+			}
+			n := spec.InboundAuthName(ib, u)
 			names = append(names, n)
 			authNames[u.ID] = append(authNames[u.ID], n)
 		}
@@ -56,6 +60,13 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 			ins = append(ins, renderShadowTLS(ib, ibUsers, in["tag"].(string)))
 		}
 		ins = append(ins, in)
+		if ib.Protocol == spec.Mieru && strings.EqualFold(ib.MieruTransport, "BOTH") {
+			udp := cloneM(in)
+			udp["tag"] = mieruUDPTag(ib.Tag)
+			udp["listen_port"] = ib.Port + 1
+			udp["transport"] = "UDP"
+			ins = append(ins, udp)
+		}
 	}
 
 	outs := []any{m{"type": "direct", "tag": "direct"}}
@@ -181,9 +192,10 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		}
 		route["rules"] = append([]any{m{"inbound": tags, "action": "resolve", "server": server}}, route["rules"].([]any)...)
 	}
-	if err := core.ApplyOverride("singbox", cfg, node.Overrides["singbox"]); err != nil {
+	if err := core.ApplyOverride("singbox", cfg, node.Overrides[singboxDistribution(opt.Distribution)]); err != nil {
 		return nil, fmt.Errorf("sing-box: %w", err)
 	}
+	expandMieruTags(cfg, inbounds)
 	return json.MarshalIndent(cfg, "", "  ")
 }
 
@@ -194,6 +206,25 @@ func renderInbound(ib spec.Inbound, users []spec.User) (m, error) {
 		"listen_port": ib.Port,
 	}
 	switch ib.Protocol {
+	case spec.SSH:
+		if ib.SSH == nil {
+			return nil, fmt.Errorf("SSH host key is required")
+		}
+		in["type"], in["host_key"] = "ssh", []string{ib.SSH.PrivateKey}
+		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundAuthName(ib, u), "password": u.Password} })
+	case spec.Mieru:
+		in["type"], in["transport"] = "mieru", "TCP"
+		if strings.EqualFold(ib.MieruTransport, "UDP") {
+			in["transport"] = "UDP"
+		}
+		in["users"] = mapUsers(users, func(u spec.User) m { return m{"name": spec.InboundAuthName(ib, u), "password": u.Password} })
+		if ib.TrafficPattern != "" {
+			in["traffic_pattern"] = ib.TrafficPattern
+		}
+		if ib.MieruMTU > 0 {
+			in["mtu"] = ib.MieruMTU
+		}
+
 	case spec.VLESS:
 		in["type"] = "vless"
 		in["users"] = mapUsers(users, func(u spec.User) m {
@@ -692,4 +723,47 @@ func renderShadowTLS(ib spec.Inbound, users []spec.User, detour string) m {
 			return m{"name": spec.InboundUser(u.Name, ib.Tag), "password": spec.ShadowTLSUserKey(u.UUID)}
 		}),
 	}
+}
+
+func singboxDistribution(name string) string {
+	if name == "" {
+		return "singbox"
+	}
+	return name
+}
+func mieruUDPTag(tag string) string { return "mieru-udp@" + tag }
+
+// BOTH creates two transport listeners with one accounting identity. Routing
+// and inbound counter selectors must cover both, including private policies.
+func expandMieruTags(cfg m, inbounds []spec.Inbound) {
+	extra := map[string]string{}
+	for _, ib := range inbounds {
+		if ib.Protocol == spec.Mieru && strings.EqualFold(ib.MieruTransport, "BOTH") {
+			extra[ib.Tag] = mieruUDPTag(ib.Tag)
+		}
+	}
+	var walk func(any)
+	walk = func(v any) {
+		switch v := v.(type) {
+		case map[string]any:
+			for key, value := range v {
+				if key == "inbound" || key == "inbounds" {
+					if tags, ok := value.([]string); ok {
+						for _, tag := range append([]string(nil), tags...) {
+							if x := extra[tag]; x != "" {
+								tags = append(tags, x)
+							}
+						}
+						v[key] = tags
+					}
+				}
+				walk(value)
+			}
+		case []any:
+			for _, x := range v {
+				walk(x)
+			}
+		}
+	}
+	walk(cfg)
 }

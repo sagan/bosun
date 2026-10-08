@@ -266,7 +266,8 @@
         "snellMultiUser": "Multi-user Snell requires sing-box.",
         "snellTLS": "Snell TLS obfuscation requires snell-server.",
         "unknown": "This core is not recognized. Choose a compatible core.",
-        "privateAccess": "Private access requires a recent capability report from a supported node and core."
+        "privateAccess": "Private access requires a recent capability report from a supported node and core.",
+        "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita."
       }
     }
   },
@@ -1009,5 +1010,32 @@
     "portsHint": "Both 0: all ports. Last port 0: first port only.",
     "add": "Add rule",
     "remove": "Remove rule"
+  },
+  "coreManager": {
+    "title": "Core management",
+    "subtitle": "Download versions, then choose which version each core runs.",
+    "unavailable": "Upgrade bosun to a version that reports core management support.",
+    "offline": "The node must be online to manage cores.",
+    "readOnly": "Manage this node from Captain with an administrator account.",
+    "working": "Operation in progress. Downloads can take several minutes.",
+    "downloaded": "Download completed. Existing inbounds are unchanged.",
+    "activated": "Core activated.",
+    "active": "Active",
+    "external": "External binary",
+    "notEnabled": "Not enabled",
+    "version": "Version",
+    "tested": "Tested",
+    "caution": "Use with caution",
+    "broken": "Known issues",
+    "installed": "Downloaded",
+    "extendedHint": "Extended Mieru needs explicit selection and a client subscription refresh after switching from mita. This build only supports wildcard listening; use mita when binding a specific IP. Native mita quotas are unsupported; bosun/Captain quota enforcement remains available.",
+    "externalHint": "An explicit binary path is configured on the node. Remove that pin before switching from the panel.",
+    "download": "Download",
+    "activate": "Activate",
+    "activateHint": "Activate {{core}} {{version}}? Connections on this core will restart. Configuration is checked first; startup failure restores the previous version. Downloading alone does not switch cores.",
+    "inbounds": "Current inbounds",
+    "sshHint": "SSH proxy supports TCP forwarding only, with per-user passwords and a generated host key. Use sing-box subscriptions for host key verification; no shell, SFTP or UDP.",
+    "timeout": "Operation timed out. Refresh to check the node before retrying.",
+    "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita."
   }
 }

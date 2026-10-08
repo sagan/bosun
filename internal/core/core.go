@@ -5,6 +5,7 @@ package core
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -37,6 +38,7 @@ type Core interface {
 
 // Registry holds the enabled cores in registration order.
 type Registry struct {
+	mu    sync.RWMutex
 	cores map[string]Core
 	order []string
 }
@@ -48,6 +50,8 @@ func NewRegistry() *Registry {
 
 // Register adds a core. Registration order is the default preference order.
 func (r *Registry) Register(c Core) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if _, dup := r.cores[c.Name()]; dup {
 		panic("core registered twice: " + c.Name())
 	}
@@ -57,12 +61,16 @@ func (r *Registry) Register(c Core) {
 
 // Get returns a core by name.
 func (r *Registry) Get(name string) (Core, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.cores[name]
 	return c, ok
 }
 
 // Names returns core names in registration order.
 func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return append([]string(nil), r.order...)
 }
 
@@ -99,6 +107,8 @@ func (r *Registry) Split(inbounds []spec.Inbound) (byCore map[string][]spec.Inbo
 
 // Candidates returns the enabled adapters in configured priority order.
 func (r *Registry) Candidates() []spec.CoreCandidate {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := make([]spec.CoreCandidate, 0, len(r.order))
 	for _, name := range r.order {
 		out = append(out, spec.CoreCandidate{Name: name, Capabilities: r.cores[name].Capabilities()})
@@ -126,4 +136,25 @@ type OutboundStatser interface {
 // Xray and the official Hysteria server do, sing-box and mita do not.
 type OnlineTracker interface {
 	Online(ctx context.Context) (map[string][]string, error)
+}
+
+// Replace publishes a validated instance without changing preference order.
+// nil removes a newly enabled instance when activation has to roll back.
+func (r *Registry) Replace(name string, c Core) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c == nil {
+		delete(r.cores, name)
+		for i, n := range r.order {
+			if n == name {
+				r.order = append(r.order[:i], r.order[i+1:]...)
+				break
+			}
+		}
+		return
+	}
+	if _, ok := r.cores[name]; !ok {
+		r.order = append(r.order, name)
+	}
+	r.cores[name] = c
 }

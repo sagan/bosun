@@ -4,7 +4,7 @@ import { api } from './api'
 
 type CoreOption = { name: string; compatible: boolean; reason?: string; available: boolean | null }
 type CoreOptions = { options: CoreOption[]; inventory_known: boolean; auto_core: string }
-const coreNames: Record<string, string> = { singbox: 'sing-box', xray: 'Xray', mita: 'mita (Mieru)', hysteria: 'Hysteria 2', snell: 'snell-server' }
+const coreNames: Record<string, string> = { 'singbox-extended': 'sing-box Extended', singbox: 'sing-box', xray: 'Xray', mita: 'mita (Mieru)', hysteria: 'Hysteria 2', snell: 'snell-server' }
 export const coreName = (name: string) => coreNames[name] || name
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
 
@@ -12,6 +12,7 @@ const object = (v: unknown): Record<string, unknown> => v !== null && typeof v =
 // private keys, which must never enter URLs or TanStack Query's cache keys.
 function probe(ib: Record<string, unknown>): string {
   return new URLSearchParams({
+    bound_listen: String(!!ib.listen && !['::', '0.0.0.0'].includes(String(ib.listen))),
     private_access: String(!!ib.private_access && object(ib.private_access).mode !== 'off'),
     protocol: String(ib.protocol || ''), transport: String(object(ib.transport).type || 'tcp'), cipher: String(ib.cipher || ''),
     reality: String(object(ib.tls).mode === 2), shadow_tls: String(!!ib.shadow_tls), fallbacks: String(Array.isArray(ib.fallbacks) && ib.fallbacks.length > 0),
@@ -29,7 +30,8 @@ export function useCoreSelection(endpoint: string, inbound: Record<string, unkno
   const unavailable = chosen?.available === false
   const noAuto = !selected && result?.inventory_known && !result.auto_core
   const privateUnknown = !!inbound?.private_access && object(inbound.private_access).mode !== 'off' && !result?.inventory_known
-  const error = privateUnknown ? t('inbounds.coreSelection.reasons.privateAccess') : incompatible ? t(`inbounds.coreSelection.reasons.${chosen?.reason || 'unknown'}`) : unavailable ? t('inbounds.coreSelection.unavailable') : noAuto ? t('inbounds.coreSelection.noAvailable') : undefined
+  const extensionUnknown = (selected === 'singbox-extended' || inbound?.protocol === 'ssh') && !result?.inventory_known
+  const error = extensionUnknown ? t('coreManager.unavailable') : privateUnknown ? t('inbounds.coreSelection.reasons.privateAccess') : incompatible ? t(`inbounds.coreSelection.reasons.${chosen?.reason || 'unknown'}`) : unavailable ? t('inbounds.coreSelection.unavailable') : noAuto ? t('inbounds.coreSelection.noAvailable') : undefined
   const data = [
     { value: '', label: t('inbounds.coreSelection.auto') },
     ...(result?.options ?? []).filter((c) => c.compatible || c.name === selected).map((c) => ({ value: c.name, label: `${coreName(c.name)}${c.available === false ? ` · ${t('inbounds.coreSelection.notEnabled')}` : ''}`, disabled: !c.compatible || c.available === false })),

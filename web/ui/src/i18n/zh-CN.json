@@ -266,7 +266,8 @@
         "snellMultiUser": "Snell 多用户模式需要 sing-box。",
         "snellTLS": "Snell TLS 混淆需要 snell-server。",
         "unknown": "无法识别此内核，请选择兼容内核。",
-        "privateAccess": "私网访问需要支持此功能的节点、内核及最近的能力上报。"
+        "privateAccess": "私网访问需要支持此功能的节点、内核及最近的能力上报。",
+        "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。"
       }
     }
   },
@@ -1009,5 +1010,32 @@
     "portsHint": "均为 0：全部端口；结束端口为 0：仅起始端口。",
     "add": "添加规则",
     "remove": "删除规则"
+  },
+  "coreManager": {
+    "title": "内核管理",
+    "subtitle": "先下载版本，再选择每个内核运行的版本。",
+    "unavailable": "请升级 bosun，当前节点尚未上报内核管理能力。",
+    "offline": "节点在线后才能管理内核。",
+    "readOnly": "请使用管理员账号在 Captain 中管理此节点。",
+    "working": "操作进行中，下载可能需要几分钟。",
+    "downloaded": "下载完成，现有入站未变更。",
+    "activated": "内核已启用。",
+    "active": "当前版本",
+    "external": "外部二进制",
+    "notEnabled": "未启用",
+    "version": "版本",
+    "tested": "已验证",
+    "caution": "谨慎使用",
+    "broken": "已知问题",
+    "installed": "已下载",
+    "extendedHint": "扩展版 Mieru 需要手动选择；从 mita 切换后，客户端须刷新订阅。此构建只支持监听所有地址，需要绑定指定 IP 时请使用 mita。 不支持 mita 原生配额；仍可使用 bosun/Captain 的额度管理。",
+    "externalHint": "节点配置指定了二进制路径，请先移除该指定，再从面板切换。",
+    "download": "下载",
+    "activate": "启用",
+    "activateHint": "启用 {{core}} {{version}}？该内核上的连接会重启。系统先检查配置，启动失败时恢复旧版本。仅下载不会切换内核。",
+    "inbounds": "现有入站",
+    "sshHint": "SSH 代理仅支持 TCP 转发，使用用户密码和自动生成的主机密钥。请使用 sing-box 订阅以校验主机公钥；不提供 shell、SFTP 或 UDP。",
+    "timeout": "操作等待超时，请先刷新查看节点状态再重试。",
+    "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。"
   }
 }

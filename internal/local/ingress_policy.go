@@ -33,6 +33,9 @@ func (s *Store) checkIngressesLocked(gs []Ingress) error {
 		}
 		for _, g := range gs {
 			if g.ID == ib.IngressID {
+				if err := ib.Inbound.CheckCoreListen(g.BindIP); err != nil {
+					return err
+				}
 				if err := g.Ports().CheckInbound(ib.Inbound); err != nil {
 					return fmt.Errorf("inbound %s: %w", ib.Tag, err)
 				}

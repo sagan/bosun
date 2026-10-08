@@ -63,6 +63,25 @@ func (a *Agent) runJobs(ctx context.Context) {
 func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobResult {
 	out := agentproto.JobResult{ID: j.ID, Kind: j.Kind}
 	switch j.Kind {
+	case spec.CoreManagementKind:
+		var p spec.CoreJobParams
+		if err := json.Unmarshal(j.Params, &p); err != nil || p.Validate() != nil {
+			out.Error = "invalid core management request"
+			break
+		}
+		now := time.Now().Unix()
+		if p.ExpiresAt <= now || p.ExpiresAt > now+spec.CoreManagementTTL+30 {
+			out.Error = "core management request expired or clock is out of sync"
+			break
+		}
+		jctx, cancel := context.WithDeadline(ctx, time.Unix(p.ExpiresAt, 0))
+		defer cancel()
+		if err := a.ManageCore(jctx, p.CoreRequest); err != nil {
+			out.Error = err.Error()
+			break
+		}
+		out.Result, _ = json.Marshal(a.CoreInventory())
+
 	case spec.NetworkDiagnosticKind:
 		var p spec.DiagnosticParams
 		if err := json.Unmarshal(j.Params, &p); err != nil || p.Validate() != nil {

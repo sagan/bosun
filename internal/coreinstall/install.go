@@ -18,11 +18,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Installer places core binaries under Root/<core>/<version>/<binary>.
 type Installer struct {
+	mu      sync.Mutex
 	Root    string
 	Log     *slog.Logger
 	HTTP    *http.Client
@@ -52,7 +54,7 @@ func (i *Installer) Path(core, version string) string {
 
 // Installed reports whether the release binary is present and executable.
 func (i *Installer) Installed(core, version string) bool {
-	st, err := os.Stat(i.Path(core, version))
+	st, err := os.Lstat(i.Path(core, version))
 	return err == nil && st.Mode().IsRegular() && st.Mode()&0o111 != 0
 }
 
@@ -90,14 +92,22 @@ func (i *Installer) Ensure(ctx context.Context, core, version string) (string, e
 // Install fetches and verifies a release, preferring a prebuilt asset for
 // this platform and falling back to a Go build.
 func (i *Installer) Install(ctx context.Context, rel Release) (string, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	dest := i.Path(rel.Core, rel.Version)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err
 	}
-	tmp := dest + ".partial"
+	f, err := os.CreateTemp(filepath.Dir(dest), ".package-*")
+	if err != nil {
+		return "", err
+	}
+	tmp := f.Name()
+	if err := f.Close(); err != nil {
+		return "", err
+	}
 	defer os.Remove(tmp)
 
-	var err error
 	asset, hasAsset := rel.Assets[i.platform()]
 	if i.Musl {
 		if a, ok := rel.Assets[i.platform()+"-musl"]; ok {
@@ -285,6 +295,9 @@ func (i *Installer) build(ctx context.Context, b Build, dest string) error {
 	}
 	defer os.RemoveAll(gobin)
 
+	if b.Repository != "" {
+		return i.buildSource(ctx, b, goBin, gobin, dest)
+	}
 	args := []string{"install", "-trimpath"}
 	if len(b.Tags) > 0 {
 		args = append(args, "-tags", strings.Join(b.Tags, ","))
@@ -306,4 +319,38 @@ func (i *Installer) build(ctx context.Context, b Build, dest string) error {
 		return fmt.Errorf("coreinstall: build produced no binary: %w", err)
 	}
 	return os.WriteFile(dest, data, 0o755)
+}
+
+// Forks retain sing-box's original module path; go install fork@tag cannot
+// build them. Checkout an immutable revision and apply only vetted dependency pins.
+func (i *Installer) buildSource(ctx context.Context, b Build, goBin, work, dest string) error {
+	source := filepath.Join(work, "source")
+	clone := exec.CommandContext(ctx, "git", "clone", "--depth", "1", "--branch", b.Version, "--", b.Repository, source)
+	if output, err := clone.CombinedOutput(); err != nil {
+		return fmt.Errorf("core source download failed: %w: %s", err, output)
+	}
+	rev := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "HEAD")
+	output, err := rev.Output()
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(output)) != b.Commit {
+		return errors.New("core source commit mismatch")
+	}
+	if len(b.Modules) > 0 {
+		update := exec.CommandContext(ctx, goBin, append([]string{"get"}, b.Modules...)...)
+		update.Dir = source
+		update.Env = append(os.Environ(), "GOTOOLCHAIN=go1.26.8", "GOFLAGS=-mod=mod", "GOWORK=off")
+		if output, err := update.CombinedOutput(); err != nil {
+			return fmt.Errorf("core dependency update failed: %w: %.4096s", err, output)
+		}
+	}
+	args := []string{"build", "-trimpath", "-buildvcs=false", "-tags", strings.Join(b.Tags, ","), "-ldflags", "-s -w " + b.LDFlags, "-o", dest, b.Package}
+	cmd := exec.CommandContext(ctx, goBin, args...)
+	cmd.Dir = source
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOFLAGS=-mod=readonly", "GOTOOLCHAIN=go1.26.8", "GOOS="+i.GOOS, "GOARCH="+i.GOARCH)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("core source build failed: %w: %.4096s", err, output)
+	}
+	return nil
 }

@@ -134,7 +134,7 @@ func shareURI(l Line) string {
 		if ib.MieruHandshake != "" {
 			q.Set("handshake-mode", ib.MieruHandshake)
 		}
-		return "mierus://" + url.PathEscape(l.UUID) + ":" + url.PathEscape(l.Password) + "@" + l.Host + "?" + q.Encode()
+		return "mierus://" + url.PathEscape(proxyUsername(l)) + ":" + url.PathEscape(l.Password) + "@" + l.Host + "?" + q.Encode()
 	}
 	return ""
 }

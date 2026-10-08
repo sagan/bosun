@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/zeptop-dev/bosun/internal/core"
 	"strings"
+	"time"
 )
 
 // OverrideCores are the cores whose config accepts an override object.
@@ -37,6 +38,14 @@ func (s *Store) SetOverrides(in map[string]string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	node, _ := s.buildNode(time.Now())
+	node.Overrides = map[string]json.RawMessage{}
+	for k, v := range clean {
+		node.Overrides[k] = json.RawMessage(v)
+	}
+	if err := node.ValidatePrivateAccessNode(); err != nil {
+		return err
+	}
 	s.st.Overrides = clean
 	return s.commit()
 }

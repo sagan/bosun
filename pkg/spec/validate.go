@@ -16,6 +16,12 @@ import (
 // the panel can show it on the form and the agent in the doctor. Fields a
 // core fills later (certificate paths for auto_cert) are not required.
 func (i Inbound) Validate() error {
+	if err := i.PrivateAccess.Validate(); err != nil {
+		return err
+	}
+	if i.PrivateAccess.Enabled() && i.Reverse != nil && i.Reverse.Receiver {
+		return fmt.Errorf("private access belongs to the user inbound, not the reverse receiver")
+	}
 	if i.Reverse != nil {
 		if err := i.Reverse.Validate(i); err != nil {
 			return err

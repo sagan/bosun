@@ -483,3 +483,27 @@ func TestClearPreservesForeignIngress(t *testing.T) {
 		t.Fatal("shared ingress qdisc removed")
 	}
 }
+
+func TestPrivateMarksShareClassAndReconcile(t *testing.T) {
+	k := newTC()
+	s := k.shaper()
+	ctx := context.Background()
+	if err := s.Apply(ctx, []Limit{{UserID: 7, Mbps: 2, Marks: []int64{0x41000001, 0x41000002}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, dev := range []string{"eth0", ifbDev} {
+		for _, mark := range []string{"0x10007", "0x41000001", "0x41000002"} {
+			if !strings.Contains(k.filters[dev]["1/"+mark], "classid 1:8") {
+				t.Fatalf("%s mark %s not in same user class: %v", dev, mark, k.filters[dev])
+			}
+		}
+	}
+	if err := s.Apply(ctx, []Limit{{UserID: 7, Mbps: 2, Marks: []int64{0x41000003}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, dev := range []string{"eth0", ifbDev} {
+		if len(k.filters[dev]) != 2 || !strings.Contains(k.filters[dev]["1/0x41000003"], "classid 1:8") {
+			t.Fatalf("stale permission marks on %s: %v", dev, k.filters[dev])
+		}
+	}
+}

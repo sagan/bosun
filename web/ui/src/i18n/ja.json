@@ -265,7 +265,8 @@
         "proxyProtocol": "PROXY protocol には Xray が必要です。",
         "snellMultiUser": "Snell の複数ユーザーモードには sing-box が必要です。",
         "snellTLS": "Snell の TLS 難読化には snell-server が必要です。",
-        "unknown": "不明なコアです。対応するコアを選択してください。"
+        "unknown": "不明なコアです。対応するコアを選択してください。",
+        "privateAccess": "対応ノード・コアからの最新の機能報告が必要です。"
       }
     }
   },
@@ -993,5 +994,20 @@
     "port": "ポート",
     "add": "例外を追加",
     "applyHint": "保存後、ノード診断で適用状態を確認してください。ホスト設定の例外も有効です。再起動は不要です。"
+  },
+  "privateAccess": {
+    "title": "プライベートネットワークへのアクセス",
+    "off": "無効（既定の隔離）",
+    "internal": "内部ネットワーク（RFC1918 + IPv6 ULA）",
+    "custom": "アドレスを指定",
+    "hint": "このインバウンドの許可された全ユーザーに適用します。内部利用にはユーザーグループも制限してください。",
+    "protection": "Linux nft と対応する sing-box/Xray ノードが必要です。ループバック、リンクローカル、制御 API は保護されます。権限変更時は既存の接続を切断します。プロキシチェーン、WARP、負荷分散には未対応です。",
+    "address": "アドレス / CIDR",
+    "protocol": "プロトコル",
+    "portStart": "開始ポート",
+    "portEnd": "終了ポート",
+    "portsHint": "両方 0：全ポート。終了が 0：開始ポートのみ。",
+    "add": "ルールを追加",
+    "remove": "ルールを削除"
   }
 }

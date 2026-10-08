@@ -246,6 +246,11 @@ func (s *Store) SetRouting(nr Routing) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	node, _ := s.buildNode(time.Now())
+	node.Outbounds, node.Routes, node.DefaultOutbound, node.DNS = nr.Outbounds, nr.Routes, nr.DefaultOutbound, nr.DNS
+	if err := node.ValidatePrivateAccessNode(); err != nil {
+		return err
+	}
 	s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.DNS = nr.Outbounds, nr.Routes, nr.DefaultOutbound, nr.DNS
 	return s.commit()
 }

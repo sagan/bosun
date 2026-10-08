@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **Unreleased** — Add default-off per-inbound private destination policies for supported sing-box/Xray inbounds and managed reverse exits. Compile routing permissions into UID/socket-mark/CIDR/protocol/port nft enforcement, preserve direct routing and user tc classes, revoke established sockets on policy changes, and fail closed when enforcement cannot be installed. Add standalone forms, capability reporting and isolated real-core regression tests; reject unsupported proxy-chain and override combinations.
+
 - **v0.62.0** (2026-10-07) — Fix forwarding and destination-policy issues #9–#12.
   - Add nft IPv6 DNAT/masquerade with address-family validation and preserve IPv6 router-advertisement acceptance when enabling forwarding. Keep bracketed IPv6 addresses consistent in primary and additional target selection.
   - Report explicit probe transport and unknown health. UDP-only forwarding no longer uses TCP probes; mixed forwarding labels TCP results separately, and TCP failures no longer steer UDP hop selection. Backend apply errors remain visible and clear after recovery.

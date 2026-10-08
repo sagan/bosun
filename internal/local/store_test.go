@@ -195,3 +195,21 @@ func TestDeviceLimitAndResetCycle(t *testing.T) {
 		t.Fatalf("reset cycle: %+v", got)
 	}
 }
+
+func TestPrivateAccessRejectsConflictingRoutingAndOverride(t *testing.T) {
+	s := openTest(t)
+	ib := Inbound{Inbound: spec.Inbound{Tag: "internal", Protocol: spec.VLESS, Port: 18443, PrivateAccess: &spec.PrivateAccess{Mode: "internal"}}, Enabled: true}
+	if err := s.PutInbound(ib, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetRouting(Routing{Outbounds: []spec.Outbound{{Tag: "remote", Protocol: "socks"}}}); err == nil {
+		t.Fatal("private policy accepted an uncontrolled exit")
+	}
+	if err := s.SetOverrides(map[string]string{"xray": `{"routing":{}}`}); err == nil {
+		t.Fatal("override erased policy")
+	}
+	node, _, err := s.Node(context.Background())
+	if err != nil || len(node.Inbounds) != 1 || !node.Inbounds[0].PrivateAccess.Enabled() {
+		t.Fatal("failed save changed policy", err)
+	}
+}

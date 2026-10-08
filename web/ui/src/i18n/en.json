@@ -265,7 +265,8 @@
         "proxyProtocol": "PROXY protocol requires Xray.",
         "snellMultiUser": "Multi-user Snell requires sing-box.",
         "snellTLS": "Snell TLS obfuscation requires snell-server.",
-        "unknown": "This core is not recognized. Choose a compatible core."
+        "unknown": "This core is not recognized. Choose a compatible core.",
+        "privateAccess": "Private access requires a recent capability report from a supported node and core."
       }
     }
   },
@@ -993,5 +994,20 @@
     "port": "Port",
     "add": "Add exception",
     "applyHint": "After saving, check the node self-check for the applied guard status. Host configuration exceptions also apply; no restart is required."
+  },
+  "privateAccess": {
+    "title": "Private network access",
+    "off": "Off (default isolation)",
+    "internal": "Internal networks (RFC1918 + IPv6 ULA)",
+    "custom": "Explicit addresses",
+    "hint": "Applies to all authorized users of this inbound. Limit its user group for internal use.",
+    "protection": "Requires Linux nft and a supported sing-box/Xray node. Loopback, link-local and control APIs stay protected. Permission changes disconnect existing connections. Proxy chains, WARP and balancers are not supported.",
+    "address": "Address / CIDR",
+    "protocol": "Protocol",
+    "portStart": "First port",
+    "portEnd": "Last port",
+    "portsHint": "Both 0: all ports. Last port 0: first port only.",
+    "add": "Add rule",
+    "remove": "Remove rule"
   }
 }

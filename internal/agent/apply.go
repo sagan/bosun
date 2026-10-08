@@ -143,6 +143,13 @@ func withSkip(m map[string]string, tag, reason string) map[string]string {
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
+	if err := a.node.ValidatePrivateAccessNode(); err != nil {
+		if a.privatePolicyActive || a.node.HasPrivateAccess() {
+			return errors.Join(err, a.stopPrivateCores(ctx))
+		}
+		return err
+	}
+
 	a.statusMu.Lock()
 	restart := a.forceRestart
 	a.forceRestart = false
@@ -233,6 +240,9 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	}
 	if a.Shaper == nil || !a.Shaper.Supported() {
 		if len(limits) > 0 {
+			if node.HasPrivateAccess() {
+				return errors.Join(fmt.Errorf("private access with speed limits requires Linux nft and tc"), a.stopPrivateCores(ctx))
+			}
 			cp := *node
 			cp.UserSpeedLimitMbps = 0
 			node = &cp
@@ -250,7 +260,10 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	// xray get it only while limits are really installed (after the
 	// branch above may have dropped them), and a change means a restart so
 	// the running processes pick it up.
-	if runas.SetNetAdmin(len(limits) > 0) && runas.Active() {
+	if err := a.preparePrivateAccess(ctx, node, limits); err != nil {
+		return err
+	}
+	if runas.SetNetAdmin(len(limits) > 0 || node.HasPrivateAccess()) && runas.Active() {
 		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
 		restart = true
 	}
@@ -392,7 +405,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	if a.Conn != nil {
 		a.Conn.SetEnabled(node.ConnLog)
 	}
-	a.applyEgress(ctx, node)
+	_ = a.applyEgress(ctx, node)
 	if a.Firewall != nil {
 		for _, f := range a.fwd.Snapshot() {
 			for _, proto := range forwardProtocols(f.Protocol) {
@@ -557,7 +570,11 @@ func dstatusPortFor(cfg *spec.DStatus) int {
 
 // applyEgress also runs before bootstrap when disabled: offline panels must not
 // leave a previous process's destination restrictions installed.
-func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) {
+func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) error {
+	grants, err := node.PrivateGrants(a.users)
+	if err != nil {
+		return err
+	}
 	if a.Egress != nil {
 		uid, _ := runas.IDs()
 		allow := append([]string{}, a.EgressAllow...)
@@ -574,13 +591,16 @@ func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) {
 		if node.Decoy != nil && node.Decoy.Port > 0 {
 			ports = append(ports, node.Decoy.Port)
 		}
-		if err := a.Egress.Apply(ctx, uid, egressguard.Options{Disabled: a.EgressDisabled, Upstreams: upstreams, Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts}); err != nil {
-			a.log.Error("egress guard", "err", err)
+		applyErr := a.Egress.Apply(ctx, uid, egressguard.Options{PrivateGrants: grants, Disabled: a.EgressDisabled, Upstreams: upstreams, Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts})
+		if applyErr != nil {
+			a.log.Error("egress guard", "err", applyErr)
 		}
 		st := a.Egress.Status()
 		a.setStatus(func(s *Status) {
 			s.Egress = &st
 			s.CoreUser = runas.Name()
 		})
+		return applyErr
 	}
+	return nil
 }

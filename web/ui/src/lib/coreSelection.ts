@@ -12,6 +12,7 @@ const object = (v: unknown): Record<string, unknown> => v !== null && typeof v =
 // private keys, which must never enter URLs or TanStack Query's cache keys.
 function probe(ib: Record<string, unknown>): string {
   return new URLSearchParams({
+    private_access: String(!!ib.private_access && object(ib.private_access).mode !== 'off'),
     protocol: String(ib.protocol || ''), transport: String(object(ib.transport).type || 'tcp'), cipher: String(ib.cipher || ''),
     reality: String(object(ib.tls).mode === 2), shadow_tls: String(!!ib.shadow_tls), fallbacks: String(Array.isArray(ib.fallbacks) && ib.fallbacks.length > 0),
     proxy_protocol: String(ib.accept_proxy_protocol === true), snell_multi_user: String(ib.snell_multi_user === true), snell_obfs: String(ib.snell_obfs || ''),
@@ -27,7 +28,8 @@ export function useCoreSelection(endpoint: string, inbound: Record<string, unkno
   const incompatible = !!selected && !!result && (!chosen || !chosen.compatible)
   const unavailable = chosen?.available === false
   const noAuto = !selected && result?.inventory_known && !result.auto_core
-  const error = incompatible ? t(`inbounds.coreSelection.reasons.${chosen?.reason || 'unknown'}`) : unavailable ? t('inbounds.coreSelection.unavailable') : noAuto ? t('inbounds.coreSelection.noAvailable') : undefined
+  const privateUnknown = !!inbound?.private_access && object(inbound.private_access).mode !== 'off' && !result?.inventory_known
+  const error = privateUnknown ? t('inbounds.coreSelection.reasons.privateAccess') : incompatible ? t(`inbounds.coreSelection.reasons.${chosen?.reason || 'unknown'}`) : unavailable ? t('inbounds.coreSelection.unavailable') : noAuto ? t('inbounds.coreSelection.noAvailable') : undefined
   const data = [
     { value: '', label: t('inbounds.coreSelection.auto') },
     ...(result?.options ?? []).filter((c) => c.compatible || c.name === selected).map((c) => ({ value: c.name, label: `${coreName(c.name)}${c.available === false ? ` · ${t('inbounds.coreSelection.notEnabled')}` : ''}`, disabled: !c.compatible || c.available === false })),

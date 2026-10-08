@@ -378,6 +378,18 @@ func (s *Store) PutInbound(ib Inbound, prevTag string) error {
 		}
 	}
 
+	node, _ := s.buildNode(time.Now())
+	var next []spec.Inbound
+	for _, existing := range node.Inbounds {
+		if existing.Tag != prevTag {
+			next = append(next, existing)
+		}
+	}
+	next = append(next, ib.Inbound)
+	node.Inbounds = next
+	if err := node.ValidatePrivateAccessNode(); err != nil {
+		return err
+	}
 	if idx < 0 {
 		s.st.Inbounds = append(s.st.Inbounds, ib)
 	} else {

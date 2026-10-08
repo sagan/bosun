@@ -29,6 +29,12 @@ jobs:
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race ./...
+      - name: Real private-access cores in isolated Linux namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables iproute2 util-linux python3 openssl
+          go test -c ./internal/privateintegration -o /tmp/bosun-private.test
+          sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
       - run: make linux VERSION="${GITHUB_REF_NAME}"
       - run: scripts/build-geocheck.sh bin
       - name: diagnostic tool schema check

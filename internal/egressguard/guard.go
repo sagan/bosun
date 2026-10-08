@@ -1,10 +1,10 @@
 // Package egressguard keeps the proxy cores away from the node's own
-// private surroundings: an nftables output rule drops new connections
+// private surroundings: an nftables output rule drops outgoing subscriber connections
 // made by the core account (see runas) to link-local, cloud-metadata,
 // RFC 1918 and CGNAT ranges, so a client of a compromised or misconfigured
 // core cannot reach the cloud metadata service, the provider's internal
-// network or the panel's private side. Established flows are untouched
-// (replies to clients that happen to sit in private space still work),
+// network or the panel's private side. Original-direction established flows are checked too, so revocation works;
+// conntrack reply-direction packets to private clients still work.
 // loopback stays open (the local DNS stub), and cidrs the operator lists
 // in cores.egress_allow are exempt.
 //
@@ -58,8 +58,9 @@ var (
 // Options are the guard's inputs besides the account.
 type Options struct {
 	// Disabled removes destination restrictions but keeps root-only control APIs.
-	Disabled  bool
-	Upstreams []spec.EgressUpstream
+	PrivateGrants []spec.PrivateGrant
+	Disabled      bool
+	Upstreams     []spec.EgressUpstream
 	// Allow are operator-configured destinations that stay reachable.
 	Allow []string
 	// LoopbackPorts are the local TCP/UDP ports a core may still reach
@@ -167,6 +168,7 @@ func Script(uid int, opt Options) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "table inet %s {\n  chain output {\n    type filter hook output priority filter; policy accept;\n", table)
 	writeProtected(&b, protected)
+	writePrivateGrants(&b, uid, opt.PrivateGrants)
 	if len(a4) > 0 {
 		fmt.Fprintf(&b, "    meta skuid %d ip daddr { %s } accept\n", uid, strings.Join(a4, ", "))
 	}
@@ -210,8 +212,8 @@ func Script(uid int, opt Options) string {
 		fmt.Fprintf(&b, "    meta skuid %d ip6 daddr %s tcp dport { %s } accept\n", uid, loop6, set)
 		fmt.Fprintf(&b, "    meta skuid %d ip6 daddr %s udp dport { %s } accept\n", uid, loop6, set)
 	}
-	fmt.Fprintf(&b, "    meta skuid %d ct state new ip daddr { %s } drop\n", uid, strings.Join(spec.BlockedDestinationRanges(false), ", "))
-	fmt.Fprintf(&b, "    meta skuid %d ct state new ip6 daddr { %s } drop\n", uid, strings.Join(spec.BlockedDestinationRanges(true), ", "))
+	fmt.Fprintf(&b, "    meta skuid %d ct direction original ip daddr { %s } drop\n", uid, strings.Join(spec.BlockedDestinationRanges(false), ", "))
+	fmt.Fprintf(&b, "    meta skuid %d ct direction original ip6 daddr { %s } drop\n", uid, strings.Join(spec.BlockedDestinationRanges(true), ", "))
 	b.WriteString("  }\n}\n")
 	return b.String()
 }
@@ -221,6 +223,9 @@ func Script(uid int, opt Options) string {
 func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
 	g.applyMu.Lock()
 	defer g.applyMu.Unlock()
+	if err := validatePrivateGrants(uid, opt); err != nil {
+		return err
+	}
 	if err := validateUpstreams(opt.Upstreams); err != nil {
 		g.set(Status{Supported: g.Supported(), UID: uid, Error: err.Error()})
 		return err

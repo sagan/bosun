@@ -123,8 +123,10 @@ type Agent struct {
 	lastAttempt time.Time
 	// kernelNode/kernelByTag are what the last apply handed to the kernel
 	// helpers, so forwards applied afterwards can refresh the firewall.
-	kernelNode  *spec.Node
-	kernelByTag map[string]string
+	privatePolicyKey    string
+	privatePolicyActive bool
+	kernelNode          *spec.Node
+	kernelByTag         map[string]string
 	// pending* are traffic deltas the cores already zeroed but the panel
 	// has not acknowledged; they ride along on the next report.
 	pendingTraffic  map[trafficKey]*spec.UserTraffic

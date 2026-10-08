@@ -88,6 +88,8 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		}
 		st.users[ib.Tag] = byName
 		// Key excludes users: same key means only users may have changed.
+		policyKey, _ := json.Marshal(ib.PrivateAccess)
+		keyParts = append(keyParts, string(policyKey))
 		noUsers, err := renderInbound(ib, nil)
 		if err != nil {
 			return nil, nil, err
@@ -263,6 +265,37 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		}
 		rules = append(rules, renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)[1:]...)
 		cfg["routing"].(m)["rules"] = rules
+	}
+	privateNormal := renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)[1:]
+	privateRules, privateOuts, err := core.PrivateRoutes("xray", node, inbounds, users, privateNormal, outs, node.DefaultOutbound)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(privateRules) > 0 {
+		cfg["outbounds"] = append(outs, privateOuts...)
+		routing := cfg["routing"].(m)
+		routing["domainStrategy"] = "IPOnDemand"
+		dns, _ := cfg["dns"].(m)
+		if dns == nil {
+			dns = m{"servers": []any{"localhost"}}
+		}
+		dns["tag"] = "bosun-private-dns"
+		cfg["dns"] = dns
+		rules := renderRoutes(nil, nil, "", nil)
+		rules = append(rules, renderRoutes(audit.BlockRules(node.AuditRules), nil, "", nil)[1:]...)
+		for _, rr := range reverseRules {
+			if rr.(m)["outboundTag"] != "direct" {
+				rules = append(rules, rr)
+			}
+		}
+		rules = append(rules, privateRules...)
+		rules = append(rules, renderRoutes(node.PrivateDestRules(), nil, "", nil)[1:]...)
+		for _, rr := range reverseRules {
+			if rr.(m)["outboundTag"] == "direct" {
+				rules = append(rules, rr)
+			}
+		}
+		routing["rules"] = append([]any{m{"type": "field", "inboundTag": []string{"bosun-private-dns"}, "outboundTag": "direct"}}, append(rules, privateNormal...)...)
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	return b, st, err

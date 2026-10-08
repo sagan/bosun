@@ -265,7 +265,8 @@
         "proxyProtocol": "PROXY protocol 需要 Xray。",
         "snellMultiUser": "Snell 多使用者模式需要 sing-box。",
         "snellTLS": "Snell TLS 混淆需要 snell-server。",
-        "unknown": "無法識別此核心，請選擇相容核心。"
+        "unknown": "無法識別此核心，請選擇相容核心。",
+        "privateAccess": "私網存取需要支援此功能的節點、核心及最近的能力回報。"
       }
     }
   },
@@ -993,5 +994,20 @@
     "port": "連接埠",
     "add": "新增例外",
     "applyHint": "儲存後請在節點檢查中核對防護實際狀態。節點設定檔的例外也會生效；無需重新啟動。"
+  },
+  "privateAccess": {
+    "title": "私網存取",
+    "off": "關閉（預設隔離）",
+    "internal": "內網網段（RFC1918 + IPv6 ULA）",
+    "custom": "指定地址",
+    "hint": "對此入站的所有獲授權使用者生效；內部使用時請同時限制使用者群組。",
+    "protection": "需要 Linux nft 與支援此功能的 sing-box/Xray 節點。迴環、鏈路本地與控制 API 仍受保護。修改權限會中斷現有連線。暫不支援代理鏈、WARP 和負載平衡出站。",
+    "address": "地址 / CIDR",
+    "protocol": "協定",
+    "portStart": "起始連接埠",
+    "portEnd": "結束連接埠",
+    "portsHint": "均為 0：全部連接埠；結束為 0：僅起始連接埠。",
+    "add": "新增規則",
+    "remove": "刪除規則"
   }
 }

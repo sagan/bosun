@@ -265,7 +265,8 @@
         "proxyProtocol": "PROXY protocol에는 Xray가 필요합니다.",
         "snellMultiUser": "Snell 다중 사용자 모드에는 sing-box가 필요합니다.",
         "snellTLS": "Snell TLS 난독화에는 snell-server가 필요합니다.",
-        "unknown": "알 수 없는 코어입니다. 호환 코어를 선택하세요."
+        "unknown": "알 수 없는 코어입니다. 호환 코어를 선택하세요.",
+        "privateAccess": "지원되는 노드와 코어의 최신 기능 보고가 필요합니다."
       }
     }
   },
@@ -993,5 +994,20 @@
     "port": "포트",
     "add": "예외 추가",
     "applyHint": "저장 후 노드 진단에서 적용 상태를 확인하세요. 호스트 설정 파일의 예외도 적용되며 재시작은 필요하지 않습니다."
+  },
+  "privateAccess": {
+    "title": "사설 네트워크 접근",
+    "off": "끔 (기본 격리)",
+    "internal": "내부 네트워크 (RFC1918 + IPv6 ULA)",
+    "custom": "주소 지정",
+    "hint": "이 인바운드의 허가된 모든 사용자에게 적용됩니다. 내부 용도라면 사용자 그룹도 제한하세요.",
+    "protection": "Linux nft 및 지원되는 sing-box/Xray 노드가 필요합니다. 루프백, 링크 로컬, 제어 API는 보호됩니다. 권한 변경 시 기존 연결이 끊깁니다. 프록시 체인, WARP, 부하 분산은 지원하지 않습니다.",
+    "address": "주소 / CIDR",
+    "protocol": "프로토콜",
+    "portStart": "시작 포트",
+    "portEnd": "종료 포트",
+    "portsHint": "둘 다 0: 모든 포트. 종료가 0: 시작 포트만.",
+    "add": "규칙 추가",
+    "remove": "규칙 삭제"
   }
 }

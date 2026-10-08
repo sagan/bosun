@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/zeptop-dev/bosun/internal/local"
@@ -16,6 +17,16 @@ func (s *Server) coreOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) checkInboundCore(ib local.Inbound) error {
+	if ib.PrivateAccess.Enabled() {
+		a := s.currentAgent()
+		if a == nil {
+			return fmt.Errorf("private access needs a running supported agent")
+		}
+		if _, err := spec.SelectCore(ib.Inbound, a.CoreCandidates()); err != nil {
+			return err
+		}
+	}
+
 	if ib.Enabled {
 		if a := s.currentAgent(); a != nil {
 			_, err := spec.SelectCore(ib.Inbound, a.CoreCandidates())

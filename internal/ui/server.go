@@ -590,10 +590,15 @@ func (s *Server) createInbound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) updateInbound(w http.ResponseWriter, r *http.Request) {
+	cur, _ := s.d.Store.Inbound(r.PathValue("tag"))
+	oldPolicy := cur.PrivateAccess
 	var ib local.Inbound
 	if err := decode(r, &ib); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
+	}
+	if ib.PrivateAccess == nil {
+		ib.PrivateAccess = oldPolicy
 	}
 	if err := s.checkInboundCore(ib); err != nil {
 		fail(w, http.StatusBadRequest, err)

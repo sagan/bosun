@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { api, type Fallback, type FallbackLimit, type Inbound, type Ingress, type IngressInput, type Settings } from '../lib/api'
 import { firstFreeIngressPort, ingressPortLabel } from '../lib/ingress'
 import { ConfigPresets } from './ConfigPresets'
+import { PrivateAccessFields } from './PrivateAccessFields'
 import { useCoreSelection } from '../lib/coreSelection'
 import { useQuery } from '@tanstack/react-query'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
@@ -199,7 +200,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
   const apply = (r: (typeof recipes)[number]) => {
     // A recipe keeps the chosen line ingress and takes a port from its range; any protocol may ride a line.
     const port = selectedIngress ? (firstFree(selectedIngress) || r.values.port) : r.values.port
-    form.setValues({ ...empty, ...r.values, core: v.core, port, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true, ingress_id: v.ingress_id })
+    form.setValues({ ...empty, ...r.values, core: v.core, port, tag: v.tag || r.values.protocol!, remark: v.remark, enabled: true, ingress_id: v.ingress_id, extra: JSON.stringify({ private_access: JSON.parse(v.extra || '{}').private_access }) })
     if (r.values.tls === 'reality') void genReality()
     if (r.values.cipher?.startsWith('2022')) void genKey()
     if (r.values.obfs) void genPassword()
@@ -408,6 +409,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
 
         <Button variant="subtle" size="xs" onClick={() => setAdvanced((a) => !a)} style={{ alignSelf: 'flex-start' }}>{advanced ? t('inbounds.hideAdvanced') : t('inbounds.showAdvanced')}</Button>
         <Collapse in={advanced}>
+          <PrivateAccessFields json={v.extra} onChange={(s) => form.setFieldValue('extra', s)} />
           <Switch mb="sm" label={t('inbounds.noSniff')} description={t('inbounds.noSniffHint')} {...form.getInputProps('no_sniff', { type: 'checkbox' })} />
           <JsonInput label={t('inbounds.extra')} description={t('inbounds.extraHint')} autosize minRows={3} formatOnBlur {...form.getInputProps('extra')} />
         </Collapse>

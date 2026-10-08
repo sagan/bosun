@@ -129,7 +129,6 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	// nft egress guard is the backstop for destinations reached by name.
 	privRules, _ := renderRoutes(node.PrivateDestRules())
 	rules, sets := renderRoutes(node.Routes)
-	rules = append(privRules, rules...)
 	rules = append(rules, limitRules...)
 	// Egress follows ingress: a direct exit bound to each inbound's own
 	// address, after the explicit rules and the speed-limited users.
@@ -146,6 +145,12 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		outs = append(outs, bo)
 		rules = append(rules, m{"inbound": tags, "outbound": "direct@" + ip})
 	}
+	privateRules, privateOuts, err := core.PrivateRoutes("singbox", node, inbounds, users, rules, outs, final)
+	if err != nil {
+		return nil, err
+	}
+	outs = append(outs, privateOuts...)
+	rules = append(append(privateRules, privRules...), rules...)
 	cfg["outbounds"] = outs
 	route := m{"rules": append(sniffRules(inbounds), rules...), "final": final}
 	if len(sets) > 0 {
@@ -157,6 +162,24 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	if len(node.DNS) > 0 {
 		cfg["dns"] = renderDNS(node.DNS)
+	}
+	if len(privateRules) > 0 {
+		server := "dns-0"
+		if len(node.DNS) == 0 {
+			server = "private-dns"
+			cfg["dns"] = m{"servers": []any{m{"type": "local", "tag": server}}}
+		}
+		var tags []string
+		for _, ib := range inbounds {
+			if ib.Reverse == nil {
+				tag := ib.Tag
+				if ib.ShadowTLS != nil {
+					tag = spec.ShadowTLSTag(tag)
+				}
+				tags = append(tags, tag)
+			}
+		}
+		route["rules"] = append([]any{m{"inbound": tags, "action": "resolve", "server": server}}, route["rules"].([]any)...)
 	}
 	if err := core.ApplyOverride("singbox", cfg, node.Overrides["singbox"]); err != nil {
 		return nil, fmt.Errorf("sing-box: %w", err)

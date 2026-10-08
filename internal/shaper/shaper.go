@@ -26,6 +26,7 @@ import (
 // Limit is one user's cap.
 type Limit struct {
 	UserID int64
+	Marks  []int64 // additional private-access sockets, same user class
 	Mbps   int
 }
 
@@ -130,7 +131,7 @@ func (s *Shaper) Apply(ctx context.Context, limits []Limit) error {
 	sort.Slice(limits, func(i, j int) bool { return limits[i].UserID < limits[j].UserID })
 	var key strings.Builder
 	for _, l := range limits {
-		fmt.Fprintf(&key, "%d=%d;", l.UserID, l.Mbps)
+		fmt.Fprintf(&key, "%d=%d/%v;", l.UserID, l.Mbps, l.Marks)
 	}
 	s.mu.Lock()
 	// synced, not just a matching key: the first apply after a restart has
@@ -264,7 +265,7 @@ func (s *Shaper) ensureRoot(ctx context.Context, dev string, root rootInfo) erro
 // users who no longer have a limit. What the kernel holds is the truth:
 // bosun may have been restarted since the classes were installed, so its
 // own memory of them is not to be trusted.
-func (s *Shaper) reconcile(ctx context.Context, dev string, root rootInfo, want map[string]bool) {
+func (s *Shaper) reconcile(ctx context.Context, dev string, root rootInfo, want map[string]bool, handles ...map[string]bool) {
 	out, err := s.run(ctx, "tc", "class", "show", "dev", dev)
 	if err != nil {
 		return
@@ -276,7 +277,7 @@ func (s *Shaper) reconcile(ctx context.Context, dev string, root rootInfo, want 
 		}
 		stale = append(stale, cls)
 	}
-	if len(stale) == 0 {
+	if len(stale) == 0 && len(handles) == 0 {
 		return
 	}
 	drop := make(map[string]bool, len(stale))
@@ -285,7 +286,7 @@ func (s *Shaper) reconcile(ctx context.Context, dev string, root rootInfo, want 
 	}
 	if out, err := s.run(ctx, "tc", "filter", "show", "dev", dev, "parent", root.major+":"); err == nil {
 		for _, f := range fwFilters(string(out)) {
-			if drop[f.flowid] {
+			if drop[f.flowid] || (len(handles) > 0 && want[f.flowid] && !handles[0][f.handle]) {
 				_, _ = s.run(ctx, "tc", "filter", "del", "dev", dev, "parent", root.major+":", "protocol", "all", "prio", "1", "handle", f.handle, "fw")
 			}
 		}
@@ -688,6 +689,7 @@ func (s *Shaper) install(ctx context.Context, iface string, limits []Limit) erro
 			}
 		}
 		want := make(map[string]bool, len(limits))
+		wantHandles := map[string]bool{}
 		for _, l := range limits {
 			cls := r.major + ":" + strconv.FormatInt(spec.SpeedClass(l.UserID), 16)
 			want[cls] = true
@@ -696,15 +698,18 @@ func (s *Shaper) install(ctx context.Context, iface string, limits []Limit) erro
 				return fmt.Errorf("shaper: %w", err)
 			}
 			_, _ = s.run(ctx, "tc", "qdisc", "replace", "dev", dev, "parent", cls, "fq_codel")
-			mark := "0x" + strconv.FormatInt(spec.SpeedMark(l.UserID), 16)
-			if _, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", r.major+":", "protocol", "all", "prio", "1", "handle", mark, "fw", "flowid", cls); err != nil {
-				return fmt.Errorf("shaper: %w", err)
+			for _, socketMark := range append([]int64{spec.SpeedMark(l.UserID)}, l.Marks...) {
+				mark := "0x" + strconv.FormatInt(socketMark, 16)
+				wantHandles[mark] = true
+				if _, err := s.run(ctx, "tc", "filter", "replace", "dev", dev, "parent", r.major+":", "protocol", "all", "prio", "1", "handle", mark, "fw", "flowid", cls); err != nil {
+					return fmt.Errorf("shaper: %w", err)
+				}
 			}
 		}
 		// A root we rebuilt came up empty, but one we keep — a line
 		// shaper's, or our own from before a restart — still carries the
 		// classes of users who no longer have a limit.
-		s.reconcile(ctx, dev, r, want)
+		s.reconcile(ctx, dev, r, want, wantHandles)
 	}
 	nested := ""
 	if root.foreign {

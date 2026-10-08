@@ -12,8 +12,8 @@ func TestScriptAndApply(t *testing.T) {
 	for _, want := range []string{
 		"meta skuid 998 ip daddr { 10.10.0.0/24, 192.0.2.10/32 } accept",
 		"meta skuid 998 ip6 daddr { fd00:1::/64 } accept",
-		"meta skuid 998 ct state new ip daddr { " + strings.Join(spec.BlockedDestinationRanges(false), ", ") + " } drop",
-		"meta skuid 998 ct state new ip6 daddr { " + strings.Join(spec.BlockedDestinationRanges(true), ", ") + " } drop",
+		"meta skuid 998 ct direction original ip daddr { " + strings.Join(spec.BlockedDestinationRanges(false), ", ") + " } drop",
+		"meta skuid 998 ct direction original ip6 daddr { " + strings.Join(spec.BlockedDestinationRanges(true), ", ") + " } drop",
 		"meta skuid 998 ip daddr 127.0.0.0/8 tcp dport { 53, 9103 } accept",
 		"meta skuid 998 ip6 daddr ::1/128 udp dport { 53, 9103 } accept",
 	} {

@@ -28,6 +28,7 @@ type PresetRouting struct {
 // InboundTemplate makes a detached copy, discarding credentials and placement.
 // Certificate paths are deliberately not portable across machines.
 func InboundTemplate(ib Inbound) Inbound {
+	ib.PrivateAccess = nil // permissions are local decisions, never template defaults
 	raw, _ := json.Marshal(ib)
 	var v Inbound
 	_ = json.Unmarshal(raw, &v)
@@ -289,6 +290,7 @@ func (p ConfigPreset) Preview(current json.RawMessage) (PresetPreview, error) {
 		_ = json.Unmarshal(p.Payload, &next)
 		next.Tag, next.Listen, next.Port = cur.Tag, cur.Listen, cur.Port
 		next.Users, next.ScopedUsers = cur.Users, cur.ScopedUsers
+		next.PrivateAccess = cur.PrivateAccess
 		if next.Tag == "" {
 			next.Tag = string(next.Protocol)
 		}

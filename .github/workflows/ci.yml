@@ -30,3 +30,9 @@ jobs:
           go test -c ./internal/egressguard -o /tmp/bosun-egress.test
           sudo env BOSUN_NFT_TEST=1 /tmp/bosun-forward.test -test.run '^TestNFTLinuxDualStackRelay$' -test.v -test.timeout 45s
           sudo env BOSUN_NFT_TEST=1 /tmp/bosun-egress.test -test.run '^TestGuardLinuxScopedConnections$' -test.v -test.timeout 45s
+      - name: Real private-access cores in isolated Linux namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables iproute2 util-linux python3 openssl
+          go test -c ./internal/privateintegration -o /tmp/bosun-private.test
+          sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m

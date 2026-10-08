@@ -39,14 +39,18 @@ func IsReverseEmail(name string) bool { return strings.HasPrefix(name, "reverse-
 // ReverseClient actively connects from the exit to a transit. Settings only
 // contain client-side TLS material, never the transit's REALITY private key.
 type ReverseClient struct {
-	ID   string `json:"id"`
-	Host string `json:"host"`
-	Port int    `json:"port"`
-	UUID string `json:"uuid"`
-	TLS  *TLS   `json:"tls,omitempty"`
+	PrivateAccess *PrivateAccess `json:"private_access,omitempty"`
+	ID            string         `json:"id"`
+	Host          string         `json:"host"`
+	Port          int            `json:"port"`
+	UUID          string         `json:"uuid"`
+	TLS           *TLS           `json:"tls,omitempty"`
 }
 
 func (c ReverseClient) Validate() error {
+	if err := c.PrivateAccess.Validate(); err != nil {
+		return err
+	}
 	if !ValidTag(c.ID) || c.Host == "" || (net.ParseIP(c.Host) == nil && strings.ContainsAny(c.Host, " /:[]\r\n")) || c.Port < 1 || c.Port > 65535 || c.UUID == "" {
 		return fmt.Errorf("invalid reverse client identity or endpoint")
 	}

@@ -164,12 +164,13 @@ type Brutal struct {
 
 // Inbound is one listener. A node may run many, possibly on different cores.
 type Inbound struct {
-	Reverse  *ReverseInbound `json:"reverse,omitempty"`
-	Tag      string          `json:"tag,omitempty"`
-	Protocol Protocol        `json:"protocol,omitempty"`
-	Listen   string          `json:"listen,omitempty"` // "" means dual-stack any
-	Port     int             `json:"port"`
-	Core     string          `json:"core,omitempty"` // preferred core name; "" lets the registry choose
+	PrivateAccess *PrivateAccess  `json:"private_access,omitempty"`
+	Reverse       *ReverseInbound `json:"reverse,omitempty"`
+	Tag           string          `json:"tag,omitempty"`
+	Protocol      Protocol        `json:"protocol,omitempty"`
+	Listen        string          `json:"listen,omitempty"` // "" means dual-stack any
+	Port          int             `json:"port"`
+	Core          string          `json:"core,omitempty"` // preferred core name; "" lets the registry choose
 
 	TLS       *TLS       `json:"tls,omitempty"`
 	Transport *Transport `json:"transport,omitempty"`

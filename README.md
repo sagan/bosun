@@ -852,7 +852,7 @@ the node is readable by a core.
 The egress guard (on whenever `cores.user` is set; `cores.egress_guard:
 false` disables destination restrictions but retains root-only control APIs)
 adds an nftables output rule for that account:
-*new* connections from a core to loopback, link-local (`169.254.0.0/16`,
+outbound-direction packets from a core to loopback, link-local (`169.254.0.0/16`,
 the cloud metadata service), RFC 1918, CGNAT (`100.64.0.0/10`) and the
 IPv6 equivalents are dropped, so a subscriber cannot use the node to
 reach the provider's internal network, the metadata endpoint, or the
@@ -861,7 +861,7 @@ needs stay open: port 53 for a local DNS stub, hysteria's auth callback
 and the decoy site a REALITY fallback dials. Nameservers in
 `/etc/resolv.conf` that fall inside a blocked range (a VPC or
 link-local resolver) are allowed automatically on TCP/UDP port 53, so DNS keeps working on
-cloud images. Replies on established flows are never touched, so clients
+cloud images. Reply-direction packets are not blocked by destination isolation, so clients
 that arrive from private space (relays, line ingresses) keep working.
 The older `cores.egress_allow: [10.10.0.0/24]` remains an all-port exception.
 Prefer narrow exceptions in standalone **Outbounds → Routing → Private upstream
@@ -895,7 +895,7 @@ core account. They are not restricted to one outbound tag or inbound. They do
 not add subscriber direct routes, but a core without its own destination
 filter (or an unresolved-domain route) may allow users to reach the excepted
 endpoint too. Use narrowly scoped addresses/ports and upstream authentication.
-Per-inbound private access is a separate policy and is not introduced here.
+Per-inbound private access is a separate, default-off policy described below.
 
 The cores themselves also refuse those destinations for user traffic:
 sing-box and xray get a reject rule for loopback, link-local, RFC 1918
@@ -999,3 +999,56 @@ record measurements show **Not checked**. This is screening, not an end-to-end
 REALITY test: accumulated records and differences in ClientHello or destination
 edge still require validation with the actual core and client. New result
 fields are additive; existing API clients remain compatible.
+
+### Per-inbound private access (unreleased)
+
+In the inbound editor, use **Private access** (under **Advanced** in the
+standalone editor and reverse wizard). The default is
+**Off**. **Internal networks** allows RFC 1918 and IPv6 ULA; **Custom addresses**
+accepts 1–64 literal IP/CIDR rules, optionally restricted to TCP/UDP and a
+single destination port or range. Blank protocol means both; port 0 means all
+ports. CGNAT needs a custom rule. Loopback, link-local, core control APIs and
+known cloud metadata endpoints remain protected even inside a broader grant.
+Prefer a narrow address and port for a single internal service.
+
+The permission applies to every authorized user of that inbound. Use the
+existing user/group assignment to keep it internal. Full Captain administrators
+alone can enable or edit an inbound granting this access. The standalone
+administrator can configure it in the same editor. It grants destinations,
+not a new exit: existing split routes, audit blocks and bound direct exits
+still apply. OS WireGuard routes work as ordinary system routes. For managed
+VLESS Reverse, edit the user inbound through the exit node's connection wizard;
+the corresponding reverse client on B enforces its own policy, independently
+of other transits. A continues tunnelling to B. Authentication and accounting
+remain on A; the existing reverse-path per-user tc limitation is unchanged.
+
+This requires an updated bosun advertising `private_access`, Linux nftables,
+a non-root core account, enabled egress protection and sing-box or Xray.
+Capabilities reflect the node's runtime prerequisites. Native Hysteria, mita
+and snell-server, WireGuard inbounds, shared-key Snell and Xray SOCKS/HTTP
+inbounds do not support this policy. Hysteria2 may use sing-box instead.
+Currently the whole node must use direct/freedom outbounds: proxy chains,
+remote proxies, WARP, balancers, GeoIP split rules, global private grants and
+raw overrides of routing, DNS, policy, inbounds or outbounds are rejected.
+This restriction avoids claiming enforcement when a remote proxy or override
+controls the final socket. Node-wide upstream exceptions remain a separate
+feature; private grant sockets cannot borrow their broader exceptions.
+
+Changing the effective permission/mark set restarts supervised proxy cores to
+close old sockets before installing the new grants; existing connections will
+reconnect. Installation failure stops those cores and reports an apply error.
+Ordinary limited users' private socket marks share their existing tc class.
+A known older/unsupported node cannot save an enabled policy, and delivery
+withholds such inbounds/clients after a capability downgrade. Do not downgrade
+a node while relying on this feature.
+
+The additive `private_access` object lives in the existing inbound settings:
+
+```json
+{"private_access":{"mode":"custom","rules":[{"cidr":"10.10.0.2/32","protocol":"tcp","port_start":8080}]}}
+```
+
+Use `{"mode":"internal"}` for the preset and `{"mode":"off"}` to disable.
+Older API clients that omit or send null for this field preserve an existing
+policy. Templates do not export private permissions; applying a preset retains
+the destination inbound's current permission. No database migration is needed.

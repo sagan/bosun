@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core/snell"
 	"github.com/zeptop-dev/bosun/internal/core/xray"
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
+	"github.com/zeptop-dev/bosun/internal/runas"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -59,6 +62,11 @@ func configuredCores(cfg *config.Config) map[string]spec.CoreInstance {
 
 func managedFactory(cfg *config.Config, log *slog.Logger, sink func(string, string, string, int, string)) func(string, string, string) (core.Core, error) {
 	return func(name, binary, dir string) (core.Core, error) {
+		// Managed versions have nested work directories. Adapter MkdirAll
+		// calls otherwise leave the parents at 0750, inaccessible to cores.user.
+		if err := prepareManagedWorkDir(cfg.DataDir, dir); err != nil {
+			return nil, err
+		}
 		switch name {
 		case "singbox", "singbox-extended":
 			settings := cfg.Cores.Singbox
@@ -101,4 +109,24 @@ func managedFactory(cfg *config.Config, log *slog.Logger, sink func(string, stri
 			return nil, fmt.Errorf("unsupported managed distribution %q", name)
 		}
 	}
+}
+
+// Repair every managed level, including directories created by v0.64.0,
+// without widening permissions on data_dir or an outside ancestor.
+func prepareManagedWorkDir(dataDir, dir string) error {
+	rel, err := filepath.Rel(dataDir, dir)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("managed work directory must be inside data_dir")
+	}
+	path := dataDir
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		path = filepath.Join(path, part)
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("managed work directory cannot be a symlink")
+		}
+		if err := runas.MkdirRoot(path); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -29,18 +29,20 @@ const (
 
 // Stats is a snapshot of one rule's counters.
 type Stats struct {
-	Tag        string
-	Protocol   string
-	Port       int
-	Target     string
-	Backend    string
-	Up         bool // last probe succeeded (tcp targets only; udp reports true)
-	RTT        time.Duration
-	LastError  string
-	ActiveConn int64
-	TotalConn  int64
-	BytesIn    int64 // client -> target
-	BytesOut   int64 // target -> client
+	Health        string
+	ProbeProtocol string
+	Tag           string
+	Protocol      string
+	Port          int
+	Target        string
+	Backend       string
+	Up            bool // legacy availability; use Health and ProbeProtocol for measured health
+	RTT           time.Duration
+	LastError     string
+	ActiveConn    int64
+	TotalConn     int64
+	BytesIn       int64 // client -> target
+	BytesOut      int64 // target -> client
 	// Targets is per-hop state when the rule has further targets; Up and
 	// RTT above are then "some hop is up" and the preferred hop's RTT.
 	Targets []TargetStats
@@ -62,7 +64,9 @@ type rule struct {
 	hops   []*hop
 	pickMu sync.Mutex
 
-	probeMu sync.Mutex
+	probeMu         sync.Mutex
+	probeGeneration uint64
+	probeTarget     string
 	// nftBroken marks an nft or realm rule whose backend could not be
 	// installed; the target probe then never reports it up.
 	nftBroken bool
@@ -100,15 +104,18 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	nftChanged := false
 	for k, r := range m.rules {
 		if _, keep := want[k]; !keep {
+			if r.spec.Backend == "nft" {
+				nftChanged = true
+			}
 			m.log.Info("forward stopped", "tag", r.spec.Tag)
 			r.stop()
 			delete(m.rules, k)
 		}
 	}
 	var firstErr error
-	nftChanged := false
 	var nftRules, realmRules []spec.Forward
 	for k, f := range want {
 		switch f.Backend {
@@ -151,14 +158,14 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 	}
 	if len(realmRules) > 0 || (m.Realm != nil && m.Realm.applied != "") {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := m.Realm.apply(ctx, realmRules); err != nil {
-			m.log.Error("realm", "err", err)
-			for _, f := range realmRules {
-				if r, ok := m.rules[key(f)]; ok {
-					r.setProbe(false, 0, err)
-					r.nftBroken = true
-				}
+		err := m.Realm.apply(ctx, realmRules)
+		for _, f := range realmRules {
+			if r, ok := m.rules[key(f)]; ok {
+				r.setBackend(err)
 			}
+		}
+		if err != nil {
+			m.log.Error("realm", "err", err)
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -173,8 +180,10 @@ func (m *Manager) Apply(forwards []spec.Forward) error {
 func startProbeOnly(f spec.Forward, log *slog.Logger) *rule {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &rule{spec: f, cancel: cancel, log: log.With("tag", f.Tag), hops: newHops(f)}
-	r.wg.Add(1)
-	go r.probeLoop(ctx)
+	if f.Protocol != "udp" {
+		r.wg.Add(1)
+		go r.probeLoop(ctx)
+	}
 	return r
 }
 
@@ -209,8 +218,20 @@ func (m *Manager) Snapshot() []Stats {
 			ActiveConn: r.active.Load(), TotalConn: r.total.Load(),
 			BytesIn: r.bytesIn.Load(), BytesOut: r.bytesOut.Load(),
 		}
+		s.Health, s.ProbeProtocol = "down", "tcp"
+		if r.spec.Protocol == "udp" {
+			s.ProbeProtocol = "none"
+		}
+		r.probeMu.Lock()
+		if r.nftBroken {
+			s.ProbeProtocol = "backend"
+		}
+		r.probeMu.Unlock()
 		for i, h := range r.hops {
-			up, rtt, lastErr := h.state()
+			up, rtt, lastErr, health := h.snapshot()
+			if health == "up" || (health == "unknown" && s.Health != "up") {
+				s.Health = health
+			}
 			if up && !s.Up {
 				s.Up, s.RTT = true, rtt
 			}
@@ -218,7 +239,7 @@ func (m *Manager) Snapshot() []Stats {
 				s.LastError = lastErr
 			}
 			if len(r.hops) > 1 {
-				s.Targets = append(s.Targets, TargetStats{Target: h.target, Up: up, RTT: rtt, LastError: lastErr,
+				s.Targets = append(s.Targets, TargetStats{Health: health, ProbeProtocol: s.ProbeProtocol, Target: h.target, Up: up, RTT: rtt, LastError: lastErr,
 					ActiveConn: h.active.Load(), TotalConn: h.total.Load()})
 			}
 		}
@@ -346,6 +367,30 @@ func (r *rule) setProbe(up bool, rtt time.Duration, err error) {
 	}
 }
 
+func (r *rule) setBackend(err error) { r.setBackendTarget(err, "") }
+
+func (r *rule) setBackendTarget(err error, resolved string) {
+	r.probeMu.Lock()
+	defer r.probeMu.Unlock()
+	changed := r.nftBroken || (resolved != "" && resolved != r.probeTarget)
+	r.nftBroken = err != nil
+	if resolved != "" {
+		r.probeTarget = resolved
+	}
+	if err != nil || changed {
+		r.probeGeneration++
+	}
+	if err != nil {
+		r.setProbe(false, 0, err)
+	} else if changed {
+		for _, h := range r.hops {
+			h.mu.Lock()
+			h.up, h.checked, h.rtt, h.lastError = true, false, 0, ""
+			h.mu.Unlock()
+		}
+	}
+}
+
 // probeLoop measures a TCP connect to the target periodically, retrying
 // faster while the target is down so recovery is noticed quickly.
 func (r *rule) probeLoop(ctx context.Context) {
@@ -369,12 +414,15 @@ func (r *rule) probeLoop(ctx context.Context) {
 // whether all of them answered.
 func (r *rule) probe(ctx context.Context) bool {
 	r.probeMu.Lock()
-	broken := r.nftBroken
+	broken, generation, resolved := r.nftBroken, r.probeGeneration, r.probeTarget
 	r.probeMu.Unlock()
 	if broken {
 		// The ruleset is not installed; keep the apply error visible.
 		return false
 	}
+	if r.spec.Protocol == "udp" {
+		return true
+	} // no generic UDP application probe
 	var wg sync.WaitGroup
 	var down atomic.Int32
 	for _, h := range r.hops {
@@ -385,8 +433,20 @@ func (r *rule) probe(ctx context.Context) bool {
 			defer cancel()
 			start := time.Now()
 			var d net.Dialer
-			c, err := d.DialContext(dctx, "tcp", h.target)
+			target := h.target
+			if resolved != "" {
+				target = resolved
+			}
+			c, err := d.DialContext(dctx, "tcp", target)
 			rtt := time.Since(start)
+			if c != nil {
+				c.Close()
+			}
+			r.probeMu.Lock()
+			defer r.probeMu.Unlock()
+			if generation != r.probeGeneration || r.nftBroken {
+				return
+			}
 			if err != nil {
 				down.Add(1)
 				if h.set(false, 0, err) {
@@ -394,7 +454,6 @@ func (r *rule) probe(ctx context.Context) bool {
 				}
 				return
 			}
-			c.Close()
 			if h.set(true, rtt, nil) {
 				r.log.Info("target up", "target", h.target, "rtt", rtt.Round(time.Millisecond))
 			}

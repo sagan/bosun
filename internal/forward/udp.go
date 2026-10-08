@@ -17,7 +17,7 @@ type udpSession struct {
 // dialUDP opens a socket towards the first candidate hop that can be dialed
 // (for UDP that only fails on resolution or routing).
 func (r *rule) dialUDP() (net.Conn, *hop) {
-	for _, h := range r.candidates() {
+	for _, h := range r.candidatesFor("udp") {
 		t, err := net.DialTimeout("udp", h.target, dialTimeout)
 		if err == nil {
 			return t, h

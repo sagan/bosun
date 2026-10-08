@@ -191,7 +191,7 @@ func (s *Store) Mode() (Mode, *Managed, *Snapshot) {
 	}
 	var snap *Snapshot
 	if s.st.Snapshot != nil {
-		snap = &Snapshot{TakenAt: s.st.Snapshot.TakenAt, Inbounds: append([]Inbound(nil), s.st.Snapshot.Inbounds...),
+		snap = &Snapshot{EgressUpstreams: s.st.EgressUpstreams, TakenAt: s.st.Snapshot.TakenAt, Inbounds: append([]Inbound(nil), s.st.Snapshot.Inbounds...),
 			Users: append([]User(nil), s.st.Snapshot.Users...), Forwards: append([]spec.Forward(nil), s.st.Snapshot.Forwards...)}
 	}
 	return s.st.Mode, m, snap
@@ -611,6 +611,9 @@ func (s *Store) PutForward(f spec.Forward, prevTag string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := checkForwardFamily(s.st.Ingresses, f); err != nil {
+		return err
+	}
 	if err := checkIngressListener(s.st.Ingresses, f.IngressID, f.Listen, f.Port); err != nil {
 		return err
 	}
@@ -657,8 +660,9 @@ func (s *Store) Adopt(url string) error {
 	if s.st.Mode == ModeManaged {
 		return errors.New("already managed")
 	}
-	s.st.Snapshot = &Snapshot{TakenAt: time.Now(), Inbounds: s.st.Inbounds, Users: s.st.Users, Forwards: s.st.Forwards,
+	s.st.Snapshot = &Snapshot{EgressUpstreams: s.st.EgressUpstreams, TakenAt: time.Now(), Inbounds: s.st.Inbounds, Users: s.st.Users, Forwards: s.st.Forwards,
 		Ingresses: s.st.Ingresses, Outbounds: s.st.Outbounds, Routes: s.st.Routes, DefaultOutbound: s.st.DefaultOutbound, Certificates: s.st.Certificates, Probe: s.st.Probe}
+	s.st.EgressUpstreams = nil
 	s.st.Inbounds, s.st.Users, s.st.Forwards = nil, nil, nil
 	s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates = nil, nil, nil, "", nil
 	s.st.Mode = ModeManaged
@@ -684,9 +688,11 @@ func (s *Store) Detach(keep *agentproto.State) error {
 		s.importManagedLocked(keep)
 	case s.st.Snapshot != nil:
 		snap := s.st.Snapshot
+		s.st.EgressUpstreams = snap.EgressUpstreams
 		s.st.Inbounds, s.st.Users, s.st.Forwards = snap.Inbounds, snap.Users, snap.Forwards
 		s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates, s.st.Probe = snap.Ingresses, snap.Outbounds, snap.Routes, snap.DefaultOutbound, snap.Certificates, snap.Probe
 	default:
+		s.st.EgressUpstreams = nil
 		s.st.Inbounds, s.st.Users, s.st.Forwards = nil, nil, nil
 		s.st.Ingresses, s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound, s.st.Certificates = nil, nil, nil, "", nil
 	}
@@ -776,6 +782,7 @@ func (s *Store) importManagedLocked(st *agentproto.State) {
 	policies := spec.Node{AllowPrivateDest: node.AllowPrivateDest, PrivateDestAllow: node.PrivateDestAllow,
 		EgressByIngress: node.EgressByIngress, AuditRules: node.AuditRules, Decoy: node.Decoy}
 	s.st.ImportedNode = &policies
+	s.st.EgressUpstreams = append([]spec.EgressUpstream{}, node.EgressUpstreams...)
 	s.st.Outbounds, s.st.Routes, s.st.DefaultOutbound = node.Outbounds, node.Routes, node.DefaultOutbound
 	s.st.Certificates, s.st.DNS = node.Certificates, node.DNS
 	s.st.Ingresses = nil // Inbound listen addresses already include the line binding.
@@ -834,7 +841,7 @@ func (s *Store) buildNode(now time.Time) (*spec.Node, []spec.User) {
 	for _, u := range usable {
 		nodeUsers = append(nodeUsers, specOf(u))
 	}
-	node := &spec.Node{ID: "local", Forwards: s.resolvedForwardsLocked(),
+	node := &spec.Node{EgressUpstreams: append([]spec.EgressUpstream{}, s.st.EgressUpstreams...), ID: "local", Forwards: s.resolvedForwardsLocked(),
 		Outbounds: append([]spec.Outbound(nil), s.st.Outbounds...), Routes: append([]spec.RouteRule(nil), s.st.Routes...), DefaultOutbound: s.st.DefaultOutbound,
 		Certificates: append([]spec.Certificate(nil), s.st.Certificates...), DNS: append([]string(nil), s.st.DNS...), UserSpeedLimitMbps: s.st.Settings.UserSpeedLimitMbps}
 	if base := s.st.ImportedNode; base != nil {

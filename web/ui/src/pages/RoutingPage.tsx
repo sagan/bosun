@@ -9,6 +9,7 @@ import { toast } from '../lib/notify'
 import { bytes } from '../lib/format'
 import { ConfigPresets } from '../components/ConfigPresets'
 import { WarpCard, warpTemplate, type WarpAccount } from '../components/WarpCard'
+import { EgressUpstreams } from '../components/EgressUpstreams'
 import { PageHeader } from '../components/PageHeader'
 
 // Landing outbounds and route rules: paste a share link to add an exit, then
@@ -98,6 +99,7 @@ export default function RoutingPage({ embedded }: { embedded?: boolean }) {
           )}
         </Stack>
       </Card>
+      {!readOnly && <Card mt="md"><EgressUpstreams endpoint="/api/egress" /></Card>}
     </>
   )
 }

@@ -188,14 +188,17 @@ type CertStatus struct {
 
 // ForwardStatus is one relay rule's health and counters.
 type ForwardStatus struct {
-	Tag        string `json:"tag"`
-	Up         bool   `json:"up"`
-	RTTMillis  int64  `json:"rtt_ms"`
-	LastError  string `json:"last_error,omitempty"`
-	ActiveConn int64  `json:"active_conn"`
-	TotalConn  int64  `json:"total_conn"`
-	BytesIn    int64  `json:"bytes_in"`
-	BytesOut   int64  `json:"bytes_out"`
+	// Health describes only ProbeProtocol (tcp, none, or backend on apply failure).
+	Health        string `json:"health,omitempty"`
+	ProbeProtocol string `json:"probe_protocol,omitempty"`
+	Tag           string `json:"tag"`
+	Up            bool   `json:"up"`
+	RTTMillis     int64  `json:"rtt_ms"`
+	LastError     string `json:"last_error,omitempty"`
+	ActiveConn    int64  `json:"active_conn"`
+	TotalConn     int64  `json:"total_conn"`
+	BytesIn       int64  `json:"bytes_in"`
+	BytesOut      int64  `json:"bytes_out"`
 	// Targets is per-hop health for a rule with several targets, Target
 	// first (bosun >= 0.49). Up above is then "some hop is up".
 	Targets []ForwardTargetStatus `json:"targets,omitempty"`
@@ -203,12 +206,15 @@ type ForwardStatus struct {
 
 // ForwardTargetStatus is one hop of a forward with several targets.
 type ForwardTargetStatus struct {
-	Target     string `json:"target"`
-	Up         bool   `json:"up"`
-	RTTMillis  int64  `json:"rtt_ms"`
-	LastError  string `json:"last_error,omitempty"`
-	ActiveConn int64  `json:"active_conn"`
-	TotalConn  int64  `json:"total_conn"`
+	// Health describes only ProbeProtocol (tcp, none, or backend on apply failure).
+	Health        string `json:"health,omitempty"`
+	ProbeProtocol string `json:"probe_protocol,omitempty"`
+	Target        string `json:"target"`
+	Up            bool   `json:"up"`
+	RTTMillis     int64  `json:"rtt_ms"`
+	LastError     string `json:"last_error,omitempty"`
+	ActiveConn    int64  `json:"active_conn"`
+	TotalConn     int64  `json:"total_conn"`
 }
 
 // CoreStatus is one core's state.

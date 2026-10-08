@@ -61,8 +61,8 @@ export interface Forward { ingress_id?: string; tag: string; listen?: string; po
 export interface DoctorCheck { id: string; name: string; status: 'ok' | 'warn' | 'fail' | 'skip'; detail?: string }
 export interface DoctorReport { at: string; checks: DoctorCheck[]; summary: { ok: number; warn: number; fail: number; skip: number } }
 export interface RestoreResult { inbounds: number; users: number; forwards: number; ingresses: number; admin_changed: boolean }
-export interface ForwardTargetStatus { target: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number }
-export interface ForwardStatus { tag: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number; bytes_in: number; bytes_out: number; targets?: ForwardTargetStatus[] }
+export interface ForwardTargetStatus { health?: string; probe_protocol?: string; target: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number }
+export interface ForwardStatus { health?: string; probe_protocol?: string; tag: string; up: boolean; rtt_ms: number; last_error?: string; active_conn: number; total_conn: number; bytes_in: number; bytes_out: number; targets?: ForwardTargetStatus[] }
 export interface Host { cpu_percent?: number; mem_total?: number; mem_used?: number; swap_total?: number; swap_used?: number; disk_total?: number; disk_used?: number }
 export interface ShaperStatus { supported: boolean; interface?: string; users: number; error?: string }
 export interface AgentStatus { decoy?: DecoyStatus; shaper?: ShaperStatus; panel: string; ready: boolean; inbounds: number; users: number; last_pull: string; last_apply: string; last_error?: string; core_running: Record<string, boolean>; core_inbounds: Record<string, number>; assign: Record<string, string>; skipped?: Record<string, string> }

@@ -26,6 +26,7 @@ const (
 
 // State is the whole standalone configuration, persisted as one JSON file.
 type State struct {
+	EgressUpstreams []spec.EgressUpstream `json:"egress_upstreams,omitempty"`
 	// ImportedNode preserves node policies without standalone UI controls.
 	ImportedNode        *spec.Node          `json:"imported_node,omitempty"`
 	ConfigPresets       []spec.ConfigPreset `json:"config_presets,omitempty"`
@@ -167,16 +168,17 @@ type Managed struct {
 
 // Snapshot is the local objects before a takeover.
 type Snapshot struct {
-	TakenAt         time.Time          `json:"taken_at"`
-	Inbounds        []Inbound          `json:"inbounds"`
-	Users           []User             `json:"users"`
-	Forwards        []spec.Forward     `json:"forwards"`
-	Ingresses       []Ingress          `json:"ingresses,omitempty"`
-	Outbounds       []spec.Outbound    `json:"outbounds,omitempty"`
-	Routes          []spec.RouteRule   `json:"routes,omitempty"`
-	DefaultOutbound string             `json:"default_outbound,omitempty"`
-	Certificates    []spec.Certificate `json:"certificates,omitempty"`
-	Probe           ProbeSettings      `json:"probe"`
+	EgressUpstreams []spec.EgressUpstream `json:"egress_upstreams,omitempty"`
+	TakenAt         time.Time             `json:"taken_at"`
+	Inbounds        []Inbound             `json:"inbounds"`
+	Users           []User                `json:"users"`
+	Forwards        []spec.Forward        `json:"forwards"`
+	Ingresses       []Ingress             `json:"ingresses,omitempty"`
+	Outbounds       []spec.Outbound       `json:"outbounds,omitempty"`
+	Routes          []spec.RouteRule      `json:"routes,omitempty"`
+	DefaultOutbound string                `json:"default_outbound,omitempty"`
+	Certificates    []spec.Certificate    `json:"certificates,omitempty"`
+	Probe           ProbeSettings         `json:"probe"`
 }
 
 // Settings are node-wide values the UI edits.

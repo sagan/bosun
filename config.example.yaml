@@ -13,7 +13,10 @@ cores:
   order: [singbox, xray, mita, hysteria]   # preference when several cores can serve an inbound
   user: bosun-proxy           # run the cores as this unprivileged account (created on first start)
   # egress_guard: true        # default when user is set: drop core connections to private/metadata/loopback
-  # egress_allow: [10.10.0.0/24]   # destinations that stay reachable (a private upstream, a line gateway)
+  # egress_allow: [10.10.0.0/24]   # legacy all-port destination exceptions
+  # egress_upstreams:            # narrow core-socket exceptions; subscriber routing is unchanged
+  #   - {cidr: 10.10.0.2/32, protocol: tcp, port: 1080}
+  # egress_guard: false retains root-only protection of core control APIs.
   # registry_token: ghp_...   # token for a private release registry, if the bosun repo is not public
   singbox:
     stats_listen: 127.0.0.1:9101

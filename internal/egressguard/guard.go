@@ -28,10 +28,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Status is what the doctor shows.
 type Status struct {
+	Enabled   bool   `json:"enabled"`
+	Upstreams int    `json:"upstreams"`
 	Supported bool   `json:"supported"`
 	UID       int    `json:"uid"`
 	Allowed   int    `json:"allowed"`
@@ -47,14 +51,15 @@ const table = "bosun_egress"
 // to the node's own control services (the cores' own API sockets, bosun's
 // metrics and web panel) on behalf of any paying user.
 var (
-	blocked4 = []string{"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16"}
-	blocked6 = []string{"fc00::/7", "fe80::/10"}
-	loop4    = "127.0.0.0/8"
-	loop6    = "::1/128"
+	loop4 = "127.0.0.0/8"
+	loop6 = "::1/128"
 )
 
 // Options are the guard's inputs besides the account.
 type Options struct {
+	// Disabled removes destination restrictions but keeps root-only control APIs.
+	Disabled  bool
+	Upstreams []spec.EgressUpstream
 	// Allow are operator-configured destinations that stay reachable.
 	Allow []string
 	// LoopbackPorts are the local TCP/UDP ports a core may still reach
@@ -74,9 +79,11 @@ type Guard struct {
 	// Run overrides command execution (tests).
 	Run func(ctx context.Context, stdin string, name string, args ...string) ([]byte, error)
 
-	mu      sync.Mutex
-	applied string
-	status  Status
+	mu          sync.Mutex
+	applied     string
+	initialized bool
+	applyMu     sync.Mutex
+	status      Status
 }
 
 func (g *Guard) run(ctx context.Context, stdin string, name string, args ...string) ([]byte, error) {
@@ -117,9 +124,13 @@ func (g *Guard) Status() Status {
 }
 
 // Script renders the nft script for uid; opt.Allow lists cidrs (sorted, so
-// the text is stable) that stay reachable. uid < 0 renders nothing.
+// the text is stable) that stay reachable. A disabled/missing core account
+// retains only ProtectedPorts; without those it renders nothing.
 func Script(uid int, opt Options) string {
 	protected := ports(opt.ProtectedPorts)
+	if opt.Disabled {
+		uid = -1
+	}
 	if uid < 0 && len(protected) == 0 {
 		return ""
 	}
@@ -162,6 +173,22 @@ func Script(uid int, opt Options) string {
 	if len(a6) > 0 {
 		fmt.Fprintf(&b, "    meta skuid %d ip6 daddr { %s } accept\n", uid, strings.Join(a6, ", "))
 	}
+	// Validate again at the rendering boundary. Never interpolate unchecked data.
+	if validateUpstreams(opt.Upstreams) == nil {
+		rules := make([]string, 0, len(opt.Upstreams))
+		for _, u := range opt.Upstreams {
+			prefix, _ := u.Prefix()
+			family := "ip"
+			if prefix.Addr().Is6() {
+				family = "ip6"
+			}
+			rules = append(rules, fmt.Sprintf("    meta skuid %d %s daddr %s %s dport %d accept\n", uid, family, prefix, u.Protocol, u.Port))
+		}
+		sort.Strings(rules)
+		for _, rule := range rules {
+			b.WriteString(rule)
+		}
+	}
 	// Loopback: keep the few local services a core needs, drop the rest.
 	ports := make([]int, 0, len(opt.LoopbackPorts))
 	seen := map[int]bool{}
@@ -183,19 +210,25 @@ func Script(uid int, opt Options) string {
 		fmt.Fprintf(&b, "    meta skuid %d ip6 daddr %s tcp dport { %s } accept\n", uid, loop6, set)
 		fmt.Fprintf(&b, "    meta skuid %d ip6 daddr %s udp dport { %s } accept\n", uid, loop6, set)
 	}
-	fmt.Fprintf(&b, "    meta skuid %d ct state new ip daddr { %s } drop\n", uid, strings.Join(append([]string{loop4}, blocked4...), ", "))
-	fmt.Fprintf(&b, "    meta skuid %d ct state new ip6 daddr { %s } drop\n", uid, strings.Join(append([]string{loop6}, blocked6...), ", "))
+	fmt.Fprintf(&b, "    meta skuid %d ct state new ip daddr { %s } drop\n", uid, strings.Join(spec.BlockedDestinationRanges(false), ", "))
+	fmt.Fprintf(&b, "    meta skuid %d ct state new ip6 daddr { %s } drop\n", uid, strings.Join(spec.BlockedDestinationRanges(true), ", "))
 	b.WriteString("  }\n}\n")
 	return b.String()
 }
 
-// Apply installs the table for uid (uid < 0 removes it). Unchanged input
+// Apply reconciles the table, including disabled/root-only states. Unchanged input
 // is a no-op.
 func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
+	g.applyMu.Lock()
+	defer g.applyMu.Unlock()
+	if err := validateUpstreams(opt.Upstreams); err != nil {
+		g.set(Status{Supported: g.Supported(), UID: uid, Error: err.Error()})
+		return err
+	}
 	script := Script(uid, opt)
 	protected := ports(opt.ProtectedPorts)
 	g.mu.Lock()
-	same := script == g.applied
+	same := g.initialized && script == g.applied && g.status.Error == ""
 	g.mu.Unlock()
 	if same {
 		return nil
@@ -209,13 +242,18 @@ func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
 	}
 	var err error
 	if script == "" {
-		_, _ = g.run(ctx, "delete table inet "+table+"\n", "nft", "-f", "-") // a missing table is fine
+		// Listing first distinguishes an absent table from a failed delete.
+		var listed []byte
+		listed, err = g.run(ctx, "", "nft", "list", "tables")
+		if err == nil && strings.Contains(string(listed), "table inet "+table+"\n") {
+			_, err = g.run(ctx, "delete table inet "+table+"\n", "nft", "-f", "-")
+		}
 	} else {
 		if _, err = g.run(ctx, "delete table inet "+table+"\n"+script, "nft", "-f", "-"); err != nil {
 			_, err = g.run(ctx, script, "nft", "-f", "-")
 		}
 	}
-	st := Status{Supported: true, UID: uid, Allowed: len(opt.Allow), Loopback: len(opt.LoopbackPorts) > 0, Protected: protected}
+	st := Status{Enabled: !opt.Disabled && uid >= 0, Upstreams: len(opt.Upstreams), Supported: true, UID: uid, Allowed: len(opt.Allow), Loopback: len(opt.LoopbackPorts) > 0, Protected: protected}
 	if err != nil {
 		st.Error = err.Error()
 		g.set(st)
@@ -223,6 +261,7 @@ func (g *Guard) Apply(ctx context.Context, uid int, opt Options) error {
 	}
 	g.mu.Lock()
 	g.applied = script
+	g.initialized = true
 	g.status = st
 	g.mu.Unlock()
 	return nil
@@ -272,7 +311,7 @@ func ResolverAllow(path string) []string {
 
 // blockedIP reports whether the address is inside a blocked range.
 func blockedIP(ip net.IP) bool {
-	for _, c := range append(append([]string{}, blocked4...), blocked6...) {
+	for _, c := range spec.PrivateRanges {
 		if _, n, err := net.ParseCIDR(c); err == nil && n.Contains(ip) {
 			return true
 		}
@@ -308,4 +347,19 @@ func writeProtected(b *strings.Builder, protected []int) {
 	set := strings.Join(list, ", ")
 	fmt.Fprintf(b, "    meta skuid != 0 ip daddr %s tcp dport { %s } drop\n", loop4, set)
 	fmt.Fprintf(b, "    meta skuid != 0 ip6 daddr %s tcp dport { %s } drop\n", loop6, set)
+}
+
+// Node policy and local configuration each allow 64 exceptions, plus automatic
+// DNS endpoints. Validate the combined runtime list without imposing one UI's
+// list budget on the sum.
+func validateUpstreams(list []spec.EgressUpstream) error {
+	if len(list) > 256 {
+		return fmt.Errorf("too many combined upstream exceptions")
+	}
+	for _, u := range list {
+		if err := spec.ValidateEgressUpstreams([]spec.EgressUpstream{u}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -463,8 +463,8 @@
     "backendRelay": "내장 릴레이(사용자 공간)",
     "backendNft": "nftables(커널 DNAT)",
     "backendRelayHint": "bosun이 직접 중계: 도메인 대상, 연결 수와 바이트 통계 지원.",
-    "backendNftHint": "커널 DNAT, 가장 빠름; nft 명령이 필요하고 대상은 IPv4 주소만, 바이트 통계 없음.",
-    "targetNftHint": "IPv4 주소:포트 (nftables는 이름을 해석하지 않음)",
+    "backendNftHint": "커널 DNAT는 같은 주소 체계의 IPv4/IPv6를 지원합니다(IPv6는 bosun ≥ 0.62 필요). nft가 필요하며 원본 IP를 보존할 때 응답은 이 노드를 거쳐야 합니다. 주소 체계가 다르면 내장 전달 또는 realm을 사용하세요.",
+    "targetNftHint": "IP 또는 호스트 이름과 포트. IPv6: [2001:db8::10]:443. 이름은 적용 시 한 번 확인됩니다.",
     "preserveSource": "원본 IP 유지",
     "preserveSourceHint": "MASQUERADE 없이 대상에 클라이언트 실제 IP가 보입니다. 대상 서버가 응답을 이 노드로 되돌려 보내도록 라우팅되어야 연결됩니다.",
     "preserveShort": "원본 유지",
@@ -483,7 +483,11 @@
     "realmRoundRobinOnly": "realm은 연결을 분산하지만 다른 대상으로 재시도하지 않으므로 라운드 로빈만 지원합니다.",
     "nftOneTarget": "nftables는 한 주소로만 전달합니다. 여러 대상에는 내장 릴레이나 realm을 사용하세요.",
     "failoverShort": "장애 조치",
-    "roundRobinShort": "라운드 로빈"
+    "roundRobinShort": "라운드 로빈",
+    "unknown": "확인 안 됨",
+    "udpUntested": "TCP 연결이나 UDP 소켓 생성으로 UDP 서비스 상태를 확인할 수 없습니다.",
+    "tcpProbe": "TCP 연결만 검사하며 전체 프록시 작동을 확인하지 않습니다.",
+    "backendFailed": "전달 백엔드 실패"
   },
   "settings": {
     "publicHost": "공개 주소",
@@ -978,5 +982,16 @@
       "maintenance": "백업 및 유지 관리"
     },
     "navigation": "탐색 메뉴"
+  },
+  "egress": {
+    "title": "사설 업스트림 예외",
+    "hint": "IP/CIDR, 프로토콜, 포트를 지정하여 코어의 업스트림 연결을 허용합니다. 사용자 대상 제한은 그대로 유지됩니다. 이 노드의 모든 코어에 적용되며 제어 API는 보호됩니다.",
+    "loadFailed": "정책을 불러오지 못했습니다.",
+    "retry": "다시 시도",
+    "requiresVersion": "예외 설정을 위해 bosun {{version}} 이상으로 업데이트하세요.",
+    "address": "업스트림 IP / CIDR",
+    "port": "포트",
+    "add": "예외 추가",
+    "applyHint": "저장 후 노드 진단에서 적용 상태를 확인하세요. 호스트 설정 파일의 예외도 적용되며 재시작은 필요하지 않습니다."
   }
 }

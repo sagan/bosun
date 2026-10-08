@@ -433,7 +433,7 @@ type Forward struct {
 	Target    string `json:"target,omitempty"`   // host:port of the next hop
 	// Backend is "" for bosun's userspace relay, "nft" for kernel DNAT or
 	// "realm" for a zhboner/realm process bosun installs and runs; it is
-	// through nftables (IPv4 targets, needs the nft binary).
+	// through nftables (same-family IPv4/IPv6 targets, needs the nft binary).
 	Backend string `json:"backend,omitempty"`
 	// PreserveSource skips masquerading on the nft backend so the target
 	// sees the client's address; the target must route replies back here.
@@ -496,13 +496,14 @@ func (f Forward) BalanceMode() string {
 
 // Node is the complete desired state for this server.
 type Node struct {
-	ReverseClients []ReverseClient `json:"reverse_clients,omitempty"`
-	ID             string          `json:"id,omitempty"`
-	Inbounds       []Inbound       `json:"inbounds,omitempty"`
-	Outbounds      []Outbound      `json:"outbounds,omitempty"`
-	Routes         []RouteRule     `json:"routes,omitempty"`
-	Forwards       []Forward       `json:"forwards,omitempty"`
-	ACME           *ACME           `json:"acme,omitempty"`
+	EgressUpstreams []EgressUpstream `json:"egress_upstreams,omitempty"`
+	ReverseClients  []ReverseClient  `json:"reverse_clients,omitempty"`
+	ID              string           `json:"id,omitempty"`
+	Inbounds        []Inbound        `json:"inbounds,omitempty"`
+	Outbounds       []Outbound       `json:"outbounds,omitempty"`
+	Routes          []RouteRule      `json:"routes,omitempty"`
+	Forwards        []Forward        `json:"forwards,omitempty"`
+	ACME            *ACME            `json:"acme,omitempty"`
 	// Certificates are operator-supplied PEM pairs; see Certificate.
 	Certificates []Certificate `json:"certificates,omitempty"`
 	// DefaultOutbound is the tag traffic takes when no route rule matches
@@ -519,7 +520,8 @@ type Node struct {
 	// default: the cores reject those destinations, so a paying user
 	// cannot use the node to reach its control services or the
 	// provider's internal network. PrivateDestAllow are the exceptions
-	// (a private upstream, a line gateway) that stay reachable either way.
+	// that subscribers may request directly. EgressUpstreams instead permits
+	// only core sockets, without adding a subscriber direct route.
 	AllowPrivateDest bool     `json:"allow_private_dest,omitempty"`
 	PrivateDestAllow []string `json:"private_dest_allow,omitempty"`
 	// EgressByIngress makes traffic that arrived on an inbound bound to a
@@ -770,14 +772,6 @@ func (n *Node) BoundInbounds(inbounds []Inbound) map[string][]string {
 func IsIPv6(addr string) bool {
 	ip := net.ParseIP(addr)
 	return ip != nil && ip.To4() == nil
-}
-
-// PrivateRanges are the destinations user traffic is refused by default
-// (Node.AllowPrivateDest turns the refusal off). They are written as
-// literal CIDRs so no core needs a geo data file for them.
-var PrivateRanges = []string{
-	"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
-	"172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
 }
 
 // PrivateDestRules are the reject rules for those ranges, with the node's

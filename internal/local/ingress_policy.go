@@ -40,6 +40,9 @@ func (s *Store) checkIngressesLocked(gs []Ingress) error {
 		}
 	}
 	for _, f := range s.st.Forwards {
+		if err := checkForwardFamily(gs, f); err != nil {
+			return fmt.Errorf("forward %s: %w", f.Tag, err)
+		}
 		if err := checkIngressListener(gs, f.IngressID, f.Listen, f.Port); err != nil {
 			return fmt.Errorf("forward %s: %w", f.Tag, err)
 		}
@@ -58,4 +61,15 @@ func (s *Store) resolvedForwardsLocked() []spec.Forward {
 		out[i].IngressID = ""
 	}
 	return out
+}
+
+func checkForwardFamily(gs []Ingress, f spec.Forward) error {
+	if f.Listen == "" {
+		for _, g := range gs {
+			if g.ID == f.IngressID {
+				f.Listen = g.BindIP
+			}
+		}
+	}
+	return f.ValidateTargets()
 }

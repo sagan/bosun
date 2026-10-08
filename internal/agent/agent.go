@@ -94,6 +94,8 @@ type Agent struct {
 	// (DNS stub, hysteria's auth callback, the decoy site).
 	Egress              *egressguard.Guard
 	EgressAllow         []string
+	EgressDisabled      bool
+	EgressUpstreams     []spec.EgressUpstream
 	EgressLoopbackPorts []int
 	// EgressProtectedPorts are the cores' own control APIs: only root
 	// (bosun) may reach them, whoever else runs on the node.
@@ -250,6 +252,9 @@ func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metr
 // Run blocks until ctx is cancelled, then stops every core.
 func (a *Agent) Run(ctx context.Context) error {
 	defer a.stopAll()
+	if a.EgressDisabled {
+		a.applyEgress(ctx, &spec.Node{})
+	}
 
 	if err := a.bootstrap(ctx); err != nil {
 		return err

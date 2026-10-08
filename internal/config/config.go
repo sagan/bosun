@@ -35,13 +35,14 @@ type Config struct {
 		// EgressGuard drops new connections from the core account to
 		// link-local, metadata, RFC 1918 and CGNAT ranges (nftables);
 		// default on when User is set. Ranges in EgressAllow stay open.
-		EgressGuard *bool         `yaml:"egress_guard"`
-		EgressAllow []string      `yaml:"egress_allow"`
-		Singbox     *SingboxCore  `yaml:"singbox"`
-		Xray        *XrayCore     `yaml:"xray"`
-		Mita        *MitaCore     `yaml:"mita"`
-		Hysteria    *HysteriaCore `yaml:"hysteria"`
-		Snell       *SnellCore    `yaml:"snell"`
+		EgressGuard     *bool                 `yaml:"egress_guard"`
+		EgressAllow     []string              `yaml:"egress_allow"`
+		EgressUpstreams []spec.EgressUpstream `yaml:"egress_upstreams"`
+		Singbox         *SingboxCore          `yaml:"singbox"`
+		Xray            *XrayCore             `yaml:"xray"`
+		Mita            *MitaCore             `yaml:"mita"`
+		Hysteria        *HysteriaCore         `yaml:"hysteria"`
+		Snell           *SnellCore            `yaml:"snell"`
 	} `yaml:"cores"`
 
 	// MinVersion refuses any self-update or rollback below this release
@@ -213,6 +214,9 @@ func Load(path string) (*Config, error) {
 	dec.KnownFields(true)
 	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if err := spec.ValidateEgressUpstreams(c.Cores.EgressUpstreams); err != nil {
+		return nil, fmt.Errorf("config: cores.egress_upstreams: %w", err)
 	}
 	if c.Probe != nil && c.Probe.Resources != nil {
 		if err := c.Probe.Resources.Validate(); err != nil {

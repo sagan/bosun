@@ -696,10 +696,19 @@ prerouting `dnat` per tcp/udp port, a postrouting `masquerade` toward the
 target, a `ct status dnat accept` forward rule, and sets
 `net.ipv4.ip_forward=1`. `preserve_source: true` drops the masquerade so
 the target sees the client's address, which only works when the target
-routes its replies back through this node. Targets must be IPv4 (host names
-are resolved once at apply); the `nft` binary must be installed, otherwise
+routes its replies back through this node. IPv4 and IPv6 targets are supported
+(bosun ≥ 0.62); bracket IPv6 targets, for example `[2001:db8::10]:443`.
+An explicit listen address must use the same address family as the target.
+Host names resolve once at apply, choosing the listen family or preferring IPv4
+when no family is specified. Use the built-in relay or realm for IPv4-to-IPv6
+translation. IPv6 rules enable `net.ipv6.conf.all.forwarding=1` and retain RA
+acceptance (`accept_ra=2` where it was 1) to preserve learned default routes; the `nft` binary must be installed, otherwise
 the rule shows "nftables not installed" and stays down. Byte and connection
-counters are not collected for nft rules; the target probe still is.
+counters are not collected for nft rules. TCP health is a connection probe;
+UDP health stays **not checked**, including on mixed TCP/UDP rules. A UDP
+socket opening successfully is not a service check. TCP probe failure does not
+remove a target from UDP selection. Backend installation failure is reported
+separately. These health semantics also apply to the built-in and realm backends.
 
 ### Realm backend
 
@@ -841,7 +850,8 @@ share one account, so they can read each other's configs; nothing else on
 the node is readable by a core.
 
 The egress guard (on whenever `cores.user` is set; `cores.egress_guard:
-false` turns it off) adds an nftables output rule for that account:
+false` disables destination restrictions but retains root-only control APIs)
+adds an nftables output rule for that account:
 *new* connections from a core to loopback, link-local (`169.254.0.0/16`,
 the cloud metadata service), RFC 1918, CGNAT (`100.64.0.0/10`) and the
 IPv6 equivalents are dropped, so a subscriber cannot use the node to
@@ -850,10 +860,42 @@ node's own control services. On loopback only the ports a core genuinely
 needs stay open: port 53 for a local DNS stub, hysteria's auth callback
 and the decoy site a REALITY fallback dials. Nameservers in
 `/etc/resolv.conf` that fall inside a blocked range (a VPC or
-link-local resolver) are allowed automatically, so DNS keeps working on
+link-local resolver) are allowed automatically on TCP/UDP port 53, so DNS keeps working on
 cloud images. Replies on established flows are never touched, so clients
 that arrive from private space (relays, line ingresses) keep working.
-Ranges a node must reach go in `cores.egress_allow: [10.10.0.0/24]`.
+The older `cores.egress_allow: [10.10.0.0/24]` remains an all-port exception.
+Prefer narrow exceptions in standalone **Outbounds → Routing → Private upstream
+exceptions**, Captain's node routing section, or the configuration file:
+
+```yaml
+cores:
+  egress_upstreams:
+    - cidr: 10.10.0.2/32
+      protocol: tcp
+      port: 1080
+```
+
+At most 64 exceptions per configuration source; only literal IP/CIDR, `tcp` or
+`udp`, and ports 1–65535 are accepted. Local config and panel exceptions are
+combined. Saving the panel list applies on the next state update; inspect the
+node self-check for actual enforcement, support errors and exception count.
+Turning `egress_guard` off after restart removes old destination restrictions
+even if Captain is offline; it never removes root-only control API protection.
+
+The default destination policy now includes documentation, benchmarking,
+multicast, reserved and selected non-global special-use ranges (IPv4 and IPv6).
+Core routing and nft consume `pkg/spec.PrivateRanges`; globally reachable
+special allocations such as PCP/TURN anycast and global NAT64 stay available.
+This is an explicit policy, not a continuously downloaded bogon list. See the
+[IANA IPv4](https://www.iana.org/assignments/iana-ipv4-special-registry/) and
+[IPv6](https://www.iana.org/assignments/iana-ipv6-special-registry/) registries.
+
+**Scope:** these exceptions allow sockets from every core sharing the node's
+core account. They are not restricted to one outbound tag or inbound. They do
+not add subscriber direct routes, but a core without its own destination
+filter (or an unresolved-domain route) may allow users to reach the excepted
+endpoint too. Use narrowly scoped addresses/ports and upstream authentication.
+Per-inbound private access is a separate policy and is not introduced here.
 
 The cores themselves also refuse those destinations for user traffic:
 sing-box and xray get a reject rule for loopback, link-local, RFC 1918

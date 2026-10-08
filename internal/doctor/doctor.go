@@ -710,6 +710,8 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 		c.Status, c.Detail = Warn, fmt.Sprintf("cores run as %s; egress guard needs Linux with nft: %s", d.CoreUser, d.Egress.Error)
 	case d.Egress.Error != "":
 		c.Status, c.Detail = Fail, d.Egress.Error
+	case !d.Egress.Enabled:
+		c.Status, c.Detail = Warn, fmt.Sprintf("destination guard is disabled; root-only control ports: %s", joinPorts(d.Egress.Protected))
 	default:
 		extra := ""
 		if d.CoreNetAdmin {
@@ -718,7 +720,7 @@ func checkIsolation(_ context.Context, d *Deps) []Check {
 		if n := len(d.Egress.Protected); n > 0 {
 			extra += fmt.Sprintf("; the cores' own control ports (%s) are root-only", joinPorts(d.Egress.Protected))
 		}
-		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed, extra)
+		c.Status, c.Detail = OK, fmt.Sprintf("cores run as %s (uid %d); new connections to private, link-local and metadata ranges are dropped (%d exemption(s))%s", d.CoreUser, d.Egress.UID, d.Egress.Allowed+d.Egress.Upstreams, extra)
 	}
 	return []Check{c}
 }

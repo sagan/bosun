@@ -69,8 +69,8 @@ func TestResolveNFT(t *testing.T) {
 	if _, err := resolveNFT(context.Background(), "2001:db8::1:443"); err == nil {
 		t.Fatal("ipv6 accepted")
 	}
-	if _, err := resolveNFT(context.Background(), "[2001:db8::1]:443"); err == nil {
-		t.Fatal("ipv6 literal accepted")
+	if target, err := resolveNFT(context.Background(), "[2001:db8::1]:443"); err != nil || target.IP != "2001:db8::1" {
+		t.Fatalf("IPv6 target: %+v %v", target, err)
 	}
 	tg, err := resolveNFT(context.Background(), "203.0.113.30:443")
 	if err != nil || tg.IP != "203.0.113.30" || tg.Port != 443 {
@@ -116,5 +116,31 @@ func TestNFTApplyAndStatus(t *testing.T) {
 	}
 	if err := m.Apply([]spec.Forward{{Tag: "x", Port: 1, Protocol: "tcp", Target: "203.0.113.30:443", PreserveSource: true}}); err == nil {
 		t.Fatal("preserve_source on the relay accepted")
+	}
+}
+
+func TestNFTIPv6AndFamilyMismatch(t *testing.T) {
+	f := spec.Forward{Tag: "v6", Listen: "2001:db8::10", Protocol: "both", Port: 10000, Target: "[2001:db8::20]:443", Backend: "nft"}
+	target, err := resolveNFTFamily(context.Background(), f.Target, f.Listen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := renderNFT([]spec.Forward{f}, map[string]nftTarget{f.Tag: target})
+	for _, want := range []string{"ip6 daddr 2001:db8::10 tcp dport 10000 dnat ip6 to [2001:db8::20]:443", "ip6 daddr 2001:db8::10 udp dport 10000 dnat ip6 to [2001:db8::20]:443", "ip6 daddr 2001:db8::20 udp dport 443 masquerade"} {
+		if !strings.Contains(script, want) {
+			t.Fatal("wrong IPv6 rule", script)
+		}
+	}
+	f.PreserveSource = true
+	if strings.Contains(renderNFT([]spec.Forward{f}, map[string]nftTarget{f.Tag: target}), "masquerade") {
+		t.Fatal("source not preserved")
+	}
+	for _, listen := range []string{"0.0.0.0", "192.0.2.10"} {
+		if _, err := resolveNFTFamily(context.Background(), f.Target, listen); err == nil {
+			t.Fatal("cross-family nft accepted")
+		}
+	}
+	if _, err := resolveNFTFamily(context.Background(), "198.51.100.20:443", "::"); err == nil {
+		t.Fatal("v6 listen with v4 target accepted")
 	}
 }

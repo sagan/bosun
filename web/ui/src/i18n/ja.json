@@ -463,8 +463,8 @@
     "backendRelay": "内蔵リレー（ユーザー空間）",
     "backendNft": "nftables（カーネル DNAT）",
     "backendRelayHint": "bosun 自身が中継。ドメイン宛先、接続数とバイト数の統計に対応。",
-    "backendNftHint": "カーネル DNAT で最速。nft コマンドが必要、宛先は IPv4 アドレスのみ、バイト数統計なし。",
-    "targetNftHint": "IPv4 アドレス:ポート（nftables は名前解決しません）",
+    "backendNftHint": "カーネル DNAT は同一アドレスファミリの IPv4/IPv6 に対応します（IPv6 は bosun ≥ 0.62）。nft が必要です。送信元を保持する場合、応答はこのノードを経由させてください。異なるファミリ間は内蔵転送または realm を使用します。",
+    "targetNftHint": "IP またはホスト名とポート。IPv6: [2001:db8::10]:443。名前は適用時に一度解決されます。",
     "preserveSource": "送信元 IP を保持",
     "preserveSourceHint": "MASQUERADE しないため宛先にはクライアントの実 IP が見えます。宛先サーバーが応答をこのノード経由で返すよう経路設定されていないと接続できません。",
     "preserveShort": "送信元保持",
@@ -483,7 +483,11 @@
     "realmRoundRobinOnly": "realm は接続を分散できますが別のターゲットへ再接続しないため、ラウンドロビンのみです。",
     "nftOneTarget": "nftables は 1 つのアドレスにしか転送できません。複数のターゲットには内蔵リレーか realm を使ってください。",
     "failoverShort": "フェイルオーバー",
-    "roundRobinShort": "ラウンドロビン"
+    "roundRobinShort": "ラウンドロビン",
+    "unknown": "未確認",
+    "udpUntested": "TCP 接続や UDP ソケットの作成では UDP サービスの正常性を確認できません。",
+    "tcpProbe": "TCP 接続のみの検査であり、プロキシ全体の動作確認ではありません。",
+    "backendFailed": "転送バックエンド失敗"
   },
   "settings": {
     "publicHost": "公開アドレス",
@@ -978,5 +982,16 @@
       "maintenance": "バックアップと保守"
     },
     "navigation": "ナビゲーションメニュー"
+  },
+  "egress": {
+    "title": "プライベート上流の例外",
+    "hint": "IP/CIDR・プロトコル・ポートを指定してコアから上流への接続を許可します。ユーザーの宛先制限は変更されません。このノードの全コアに適用され、制御 API は保護されます。",
+    "loadFailed": "ポリシーを読み込めません。",
+    "retry": "再試行",
+    "requiresVersion": "例外を設定するには bosun {{version}} 以降に更新してください。",
+    "address": "上流 IP / CIDR",
+    "port": "ポート",
+    "add": "例外を追加",
+    "applyHint": "保存後、ノード診断で適用状態を確認してください。ホスト設定の例外も有効です。再起動は不要です。"
   }
 }

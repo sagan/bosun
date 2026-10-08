@@ -463,8 +463,8 @@
     "backendRelay": "Built-in relay (userspace)",
     "backendNft": "nftables (kernel DNAT)",
     "backendRelayHint": "bosun relays the bytes itself: domain targets, connection and byte counters.",
-    "backendNftHint": "Kernel DNAT, fastest; needs the nft binary, an IPv4 literal target, and reports no byte counters.",
-    "targetNftHint": "IPv4 address:port (nftables does not resolve names)",
+    "backendNftHint": "Kernel DNAT supports same-family IPv4/IPv6 (bosun ≥ 0.62 for IPv6) and requires nft. Preserving the source requires the target to route replies through this node. Use relay/realm for cross-family forwarding.",
+    "targetNftHint": "IP or hostname with port; IPv6: [2001:db8::10]:443. Names resolve once when applied.",
     "preserveSource": "Preserve source IP",
     "preserveSourceHint": "No MASQUERADE: the target sees the real client address, so it must route replies back through this node or nothing connects.",
     "preserveShort": "source kept",
@@ -483,7 +483,11 @@
     "realmRoundRobinOnly": "realm spreads connections but cannot retry another target, so it only offers round-robin.",
     "nftOneTarget": "nftables forwards to one address; use the built-in relay or realm for several targets.",
     "failoverShort": "failover",
-    "roundRobinShort": "round-robin"
+    "roundRobinShort": "round-robin",
+    "unknown": "Not checked",
+    "udpUntested": "UDP health is not measured by a TCP connect or an open UDP socket.",
+    "tcpProbe": "TCP connection test only; not an end-to-end proxy check.",
+    "backendFailed": "Backend failed"
   },
   "settings": {
     "publicHost": "Public address",
@@ -978,5 +982,16 @@
       "maintenance": "Backups and maintenance"
     },
     "navigation": "Navigation menu"
+  },
+  "egress": {
+    "title": "Private upstream exceptions",
+    "hint": "Allow the cores to connect to a specific upstream IP/CIDR, protocol and port. Subscriber destination restrictions stay unchanged. This applies to all cores on this node; control APIs remain protected.",
+    "loadFailed": "Could not load the policy.",
+    "retry": "Retry",
+    "requiresVersion": "Upgrade bosun to {{version}} or later to configure these exceptions.",
+    "address": "Upstream IP / CIDR",
+    "port": "Port",
+    "add": "Add exception",
+    "applyHint": "After saving, check the node self-check for the applied guard status. Host configuration exceptions also apply; no restart is required."
   }
 }

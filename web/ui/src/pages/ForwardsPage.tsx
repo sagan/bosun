@@ -12,6 +12,7 @@ import { bytes } from '../lib/format'
 import { toast } from '../lib/notify'
 import { PageHeader } from '../components/PageHeader'
 import RoutingPage from './RoutingPage'
+import { ForwardHealth } from '../components/ForwardHealth'
 
 type Values = {
  ingress_id: string;
@@ -76,9 +77,7 @@ export default function ForwardsPage() {
                 <Table.Td><Text fw={600} size="sm">{f.tag}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.listen || '0.0.0.0'}:{f.port} <Badge variant="outline" color="gray" ml={4}>{f.protocol}</Badge></Text></Table.Td>
                 <Table.Td><Text size="sm" ff="monospace" span>{f.target}</Text>{(f.targets ?? []).length > 0 && <Tooltip label={(f.targets ?? []).map((x) => x.target).join(', ')}><Badge size="xs" variant="light" ml={4}>+{f.targets!.length} · {f.balance === 'roundrobin' ? t('forwards.roundRobinShort') : t('forwards.failoverShort')}</Badge></Tooltip>}{f.backend === 'realm' && <Badge size="xs" variant="light" color="indigo" ml={4}>realm</Badge>}{f.backend === 'nft' && <Badge size="xs" variant="light" color="grape" ml={4}>nft{f.preserve_source ? ' · ' + t('forwards.preserveShort') : ''}</Badge>}</Table.Td>
-                <Table.Td>{f.status?.targets ? (
-                  <Group gap={4}>{f.status.targets.map((h) => <Tooltip key={h.target} label={`${h.target}${h.last_error ? ' — ' + h.last_error : ''} · ${h.active_conn} / ${h.total_conn}`}><Badge color={h.up ? 'teal' : 'red'}>{h.up ? `${h.rtt_ms} ms` : t('forwards.down')}</Badge></Tooltip>)}</Group>
-                ) : f.status ? <Badge color={f.status.up ? 'teal' : 'red'} title={f.status.last_error}>{f.status.up ? `${f.status.rtt_ms} ms` : t('forwards.down')}</Badge> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
+                <Table.Td>{f.status?.targets ? <Group gap={4}>{f.status.targets.map(h => <span key={h.target} title={h.target}><ForwardHealth status={h} protocol={f.protocol} /></span>)}</Group> : f.status ? <ForwardHealth status={f.status} protocol={f.protocol} /> : <Text size="sm" c="dimmed">—</Text>}</Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `${f.status.active_conn} / ${f.status.total_conn}` : '—'}</Text></Table.Td>
                 <Table.Td><Text size="sm">{f.status ? `↑ ${bytes(f.status.bytes_in)} ↓ ${bytes(f.status.bytes_out)}` : '—'}</Text></Table.Td>
                 <Table.Td><Group gap={4} justify="flex-end" wrap="nowrap">

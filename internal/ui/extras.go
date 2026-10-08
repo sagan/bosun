@@ -22,6 +22,8 @@ func (s *Server) extraRoutes() {
 	m.HandleFunc("PUT /api/ingresses/{id}", auth(s.local(s.updateIngress)))
 	m.HandleFunc("DELETE /api/ingresses/{id}", auth(s.local(s.deleteIngress)))
 
+	m.HandleFunc("GET /api/egress", auth(s.getEgress))
+	m.HandleFunc("PUT /api/egress", auth(s.local(s.putEgress)))
 	m.HandleFunc("GET /api/routing", auth(s.getRouting))
 	m.HandleFunc("PUT /api/routing", auth(s.local(s.putRouting)))
 	m.HandleFunc("POST /api/routing/parse", auth(s.parseLinks))

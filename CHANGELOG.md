@@ -6,6 +6,12 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **Unreleased** — Fix forwarding and destination-policy issues #9–#12.
+  - Add nft IPv6 DNAT/masquerade with address-family validation and preserve IPv6 router-advertisement acceptance when enabling forwarding. Keep bracketed IPv6 addresses consistent in primary and additional target selection.
+  - Report explicit probe transport and unknown health. UDP-only forwarding no longer uses TCP probes; mixed forwarding labels TCP results separately, and TCP failures no longer steer UDP hop selection. Backend apply errors remain visible and clear after recovery.
+  - Share the default special-use destination ranges between core routing and nft, retaining globally reachable exceptions. Add narrow IP/CIDR + TCP/UDP + port upstream exceptions, independent of subscriber routing permissions.
+  - Reconcile disabled egress restrictions across restart, including while Captain is unreachable, while retaining root-only core control APIs. Keep automatic resolver exceptions limited to DNS ports. Add Linux namespace integration tests for dual-stack forwarding and exception enforcement.
+
 - **v0.61.0** (2026-10-06) — Measure incoming TLS wire record sizes during REALITY target scans, including headers, encrypted overhead and stapled OCSP data. Reject candidates exceeding the conservative 8192-byte limit of the pinned Xray 26.3.27 implementation, which can fail on a large record even when an ordinary TLS handshake succeeds. Return additive size, limit, nullable status and reason-code fields; do not change the pinned core or existing API fields.
   - Show record results and unknown measurements in the standalone editor, cancel obsolete scan requests and prevent late results from replacing newer input. Match Captain's six-language display and keep record badges readable on small screens.
   - Test fragmented records and a real local TLS 1.3/h2 handshake with oversized OCSP data. This is compatibility screening, not proof of a complete REALITY connection; accumulated records and differences in ClientHello or destination edge still require validation with the actual core and client.

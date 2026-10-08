@@ -392,25 +392,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	if a.Conn != nil {
 		a.Conn.SetEnabled(node.ConnLog)
 	}
-	if a.Egress != nil {
-		uid, _ := runas.IDs()
-		allow := append([]string{}, a.EgressAllow...)
-		// A private or link-local resolver is the node's only way to
-		// resolve names; keep it reachable.
-		allow = append(allow, egressguard.ResolverAllow("")...)
-		ports := append([]int{53}, a.EgressLoopbackPorts...)
-		if node.Decoy != nil && node.Decoy.Port > 0 {
-			ports = append(ports, node.Decoy.Port)
-		}
-		if err := a.Egress.Apply(ctx, uid, egressguard.Options{Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts}); err != nil {
-			a.log.Error("egress guard", "err", err)
-		}
-		st := a.Egress.Status()
-		a.setStatus(func(s *Status) {
-			s.Egress = &st
-			s.CoreUser = runas.Name()
-		})
-	}
+	a.applyEgress(ctx, node)
 	if a.Firewall != nil {
 		for _, f := range a.fwd.Snapshot() {
 			for _, proto := range forwardProtocols(f.Protocol) {
@@ -571,4 +553,34 @@ func dstatusPortFor(cfg *spec.DStatus) int {
 		return 0
 	}
 	return n
+}
+
+// applyEgress also runs before bootstrap when disabled: offline panels must not
+// leave a previous process's destination restrictions installed.
+func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) {
+	if a.Egress != nil {
+		uid, _ := runas.IDs()
+		allow := append([]string{}, a.EgressAllow...)
+		// A private or link-local resolver is the node's only way to
+		// resolve names; keep it reachable.
+		upstreams := append([]spec.EgressUpstream{}, a.EgressUpstreams...)
+		upstreams = append(upstreams, node.EgressUpstreams...)
+		for _, resolver := range egressguard.ResolverAllow("") {
+			for _, protocol := range []string{"tcp", "udp"} {
+				upstreams = append(upstreams, spec.EgressUpstream{CIDR: resolver, Protocol: protocol, Port: 53})
+			}
+		}
+		ports := append([]int{53}, a.EgressLoopbackPorts...)
+		if node.Decoy != nil && node.Decoy.Port > 0 {
+			ports = append(ports, node.Decoy.Port)
+		}
+		if err := a.Egress.Apply(ctx, uid, egressguard.Options{Disabled: a.EgressDisabled, Upstreams: upstreams, Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts}); err != nil {
+			a.log.Error("egress guard", "err", err)
+		}
+		st := a.Egress.Status()
+		a.setStatus(func(s *Status) {
+			s.Egress = &st
+			s.CoreUser = runas.Name()
+		})
+	}
 }

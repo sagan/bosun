@@ -390,11 +390,11 @@ func cmdRun(args []string) error {
 		ag.Guard = guard
 		ag.Conn = e.conns
 		ag.Audit = e.audits
-		if cfg.EgressGuardOn() {
-			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
-			ag.EgressLoopbackPorts = loopbackPorts(cfg)
-			ag.EgressProtectedPorts = controlPorts(cfg)
-		}
+		ag.Egress, ag.EgressAllow = &egressguard.Guard{}, cfg.Cores.EgressAllow
+		ag.EgressDisabled = !cfg.EgressGuardOn()
+		ag.EgressUpstreams = cfg.Cores.EgressUpstreams
+		ag.EgressLoopbackPorts = loopbackPorts(cfg)
+		ag.EgressProtectedPorts = controlPorts(cfg)
 		ag.Firewall, ag.ExtraPorts = fw, extraPorts
 		current.ag = ag
 		return ag.Run(ctx)
@@ -565,11 +565,11 @@ func (s *supervisor) run(ctx context.Context) error {
 		ag.Guard = s.guard
 		ag.Conn = s.conns
 		ag.Audit = s.audits
-		if s.cfg.EgressGuardOn() {
-			ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
-			ag.EgressLoopbackPorts = loopbackPorts(s.cfg)
-			ag.EgressProtectedPorts = controlPorts(s.cfg)
-		}
+		ag.Egress, ag.EgressAllow = &egressguard.Guard{}, s.cfg.Cores.EgressAllow
+		ag.EgressDisabled = !s.cfg.EgressGuardOn()
+		ag.EgressUpstreams = s.cfg.Cores.EgressUpstreams
+		ag.EgressLoopbackPorts = loopbackPorts(s.cfg)
+		ag.EgressProtectedPorts = controlPorts(s.cfg)
 		ag.Firewall, ag.ExtraPorts = s.firewall, s.extraPorts
 		ag.WARPAccount, ag.SaveWARP = s.store.WARP, s.store.SetWARP
 		if s.bot != nil {

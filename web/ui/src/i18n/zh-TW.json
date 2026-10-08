@@ -463,8 +463,8 @@
     "backendRelay": "內建轉發（使用者態）",
     "backendNft": "nftables（核心 DNAT）",
     "backendRelayHint": "bosun 自己中轉，支援網域目標，有連線數和流量統計。",
-    "backendNftHint": "核心 DNAT，效能最好；需要機器上有 nft 命令，目標必須是 IPv4 位址，沒有流量統計。",
-    "targetNftHint": "IPv4 位址:連接埠（nftables 不解析網域）",
+    "backendNftHint": "核心 DNAT 支援同位址族 IPv4/IPv6（IPv6 需要 bosun ≥ 0.62），節點需安裝 nft。保留來源 IP 時，目標須經本節點回傳；跨位址族請用內建轉送或 realm。",
+    "targetNftHint": "填寫 IP 或網域與連接埠；IPv6 格式：[2001:db8::10]:443。網域在套用時解析一次。",
     "preserveSource": "保留來源 IP",
     "preserveSourceHint": "不做 MASQUERADE，目標看到的是用戶端真實 IP；目標伺服器必須把回包路由回本機，否則不通。",
     "preserveShort": "保留來源 IP",
@@ -483,7 +483,11 @@
     "realmRoundRobinOnly": "realm 能分攤連線，但不會改連另一個目標，所以只支援輪詢。",
     "nftOneTarget": "nftables 只能轉發到一個位址；多個目標請用內建轉發或 realm。",
     "failoverShort": "故障切換",
-    "roundRobinShort": "輪詢"
+    "roundRobinShort": "輪詢",
+    "unknown": "未檢測",
+    "udpUntested": "TCP 連線成功或建立 UDP 通訊端都不能證明 UDP 服務健康。",
+    "tcpProbe": "僅檢測 TCP 連線，不代表代理全鏈路可用。",
+    "backendFailed": "轉送後端失敗"
   },
   "settings": {
     "publicHost": "對外位址",
@@ -978,5 +982,16 @@
       "maintenance": "備份與維護"
     },
     "navigation": "導覽選單"
+  },
+  "egress": {
+    "title": "私網上游例外",
+    "hint": "按 IP/CIDR、協定與連接埠允許核心連至指定上游，不變更使用者目的地限制。套用至本節點所有核心；控制 API 仍受保護。",
+    "loadFailed": "策略載入失敗。",
+    "retry": "重試",
+    "requiresVersion": "請升級至 bosun {{version}} 或更新版本後設定例外。",
+    "address": "上游 IP / CIDR",
+    "port": "連接埠",
+    "add": "新增例外",
+    "applyHint": "儲存後請在節點檢查中核對防護實際狀態。節點設定檔的例外也會生效；無需重新啟動。"
   }
 }

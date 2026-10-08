@@ -22,3 +22,11 @@ jobs:
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -1
+      - name: Isolated Linux forwarding and egress guard
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nftables iproute2 util-linux python3
+          go test -c ./internal/forward -o /tmp/bosun-forward.test
+          go test -c ./internal/egressguard -o /tmp/bosun-egress.test
+          sudo env BOSUN_NFT_TEST=1 /tmp/bosun-forward.test -test.run '^TestNFTLinuxDualStackRelay$' -test.v -test.timeout 45s
+          sudo env BOSUN_NFT_TEST=1 /tmp/bosun-egress.test -test.run '^TestGuardLinuxScopedConnections$' -test.v -test.timeout 45s

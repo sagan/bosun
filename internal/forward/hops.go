@@ -23,6 +23,7 @@ type hop struct {
 
 	mu        sync.Mutex
 	up        bool
+	checked   bool
 	rtt       time.Duration
 	lastError string
 
@@ -47,6 +48,7 @@ func (h *hop) set(up bool, rtt time.Duration, err error) bool {
 	defer h.mu.Unlock()
 	changed := h.up != up
 	h.up = up
+	h.checked = true
 	if up {
 		h.rtt, h.lastError = rtt, ""
 	} else {
@@ -64,6 +66,18 @@ func (h *hop) state() (up bool, rtt time.Duration, lastError string) {
 	return h.up, h.rtt, h.lastError
 }
 
+func (h *hop) health() string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.checked {
+		return "unknown"
+	}
+	if h.up {
+		return "up"
+	}
+	return "down"
+}
+
 func (h *hop) isUp() bool {
 	up, _, _ := h.state()
 	return up
@@ -73,13 +87,15 @@ func (h *hop) isUp() bool {
 // the hops that are up in declared order, then the rest as a last resort.
 // Roundrobin: one hop chosen by smooth weighted round-robin among those up
 // (among all when none is), then the other up hops, then the rest.
-func (r *rule) candidates() []*hop {
+func (r *rule) candidates() []*hop { return r.candidatesFor("tcp") }
+
+func (r *rule) candidatesFor(network string) []*hop {
 	if len(r.hops) == 1 {
 		return r.hops
 	}
 	var up, down []*hop
 	for _, h := range r.hops {
-		if h.isUp() {
+		if network == "udp" || h.isUp() {
 			up = append(up, h)
 		} else {
 			down = append(down, h)
@@ -150,25 +166,41 @@ func (r *rule) dialTCP(ctx context.Context) (net.Conn, *hop) {
 
 // TargetStats is one hop of a rule with several targets.
 type TargetStats struct {
-	Target     string
-	Up         bool
-	RTT        time.Duration
-	LastError  string
-	ActiveConn int64
-	TotalConn  int64
+	Health        string
+	ProbeProtocol string
+	Target        string
+	Up            bool
+	RTT           time.Duration
+	LastError     string
+	ActiveConn    int64
+	TotalConn     int64
 }
 
 // Status converts a snapshot to the report shape the panels read.
 func (s Stats) Status() agentproto.ForwardStatus {
 	out := agentproto.ForwardStatus{
-		Tag: s.Tag, Up: s.Up, RTTMillis: s.RTT.Milliseconds(), LastError: s.LastError,
+		Tag: s.Tag, Health: s.Health, ProbeProtocol: s.ProbeProtocol, Up: s.Up, RTTMillis: s.RTT.Milliseconds(), LastError: s.LastError,
 		ActiveConn: s.ActiveConn, TotalConn: s.TotalConn, BytesIn: s.BytesIn, BytesOut: s.BytesOut,
 	}
 	for _, t := range s.Targets {
 		out.Targets = append(out.Targets, agentproto.ForwardTargetStatus{
-			Target: t.Target, Up: t.Up, RTTMillis: t.RTT.Milliseconds(), LastError: t.LastError,
+			Target: t.Target, Health: t.Health, ProbeProtocol: t.ProbeProtocol, Up: t.Up, RTTMillis: t.RTT.Milliseconds(), LastError: t.LastError,
 			ActiveConn: t.ActiveConn, TotalConn: t.TotalConn,
 		})
 	}
 	return out
+}
+
+// snapshot keeps the new measurement metadata and legacy fields consistent.
+func (h *hop) snapshot() (bool, time.Duration, string, string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	health := "unknown"
+	if h.checked {
+		health = "down"
+		if h.up {
+			health = "up"
+		}
+	}
+	return h.up, h.rtt, h.lastError, health
 }

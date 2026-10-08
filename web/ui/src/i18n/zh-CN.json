@@ -463,8 +463,8 @@
     "backendRelay": "内置转发（用户态）",
     "backendNft": "nftables（内核 DNAT）",
     "backendRelayHint": "bosun 自己中转，支持域名目标，有连接数和流量统计。",
-    "backendNftHint": "内核 DNAT，性能最好；需要机器上有 nft 命令，目标必须是 IPv4 地址，没有流量统计。",
-    "targetNftHint": "IPv4 地址:端口（nftables 不解析域名）",
+    "backendNftHint": "内核 DNAT 支持同地址族 IPv4/IPv6（IPv6 需要 bosun ≥ 0.62），节点需安装 nft。保留源 IP 时，目标须经本节点返回；跨地址族请用内置转发或 realm。",
+    "targetNftHint": "填写 IP 或域名及端口；IPv6 格式：[2001:db8::10]:443。域名在套用时解析一次。",
     "preserveSource": "保留源 IP",
     "preserveSourceHint": "不做 MASQUERADE，目标看到的是客户端真实 IP；目标服务器必须把回包路由回本机，否则不通。",
     "preserveShort": "保留源 IP",
@@ -483,7 +483,11 @@
     "realmRoundRobinOnly": "realm 能分摊连接，但不会改连另一个目标，所以只支持轮询。",
     "nftOneTarget": "nftables 只能转发到一个地址；多个目标请用内置转发或 realm。",
     "failoverShort": "故障切换",
-    "roundRobinShort": "轮询"
+    "roundRobinShort": "轮询",
+    "unknown": "未检测",
+    "udpUntested": "TCP 连接成功或创建 UDP 套接字都不能证明 UDP 服务健康。",
+    "tcpProbe": "仅检测 TCP 连接，不代表代理全链路可用。",
+    "backendFailed": "转发后端失败"
   },
   "settings": {
     "publicHost": "对外地址",
@@ -978,5 +982,16 @@
       "maintenance": "备份与维护"
     },
     "navigation": "导航菜单"
+  },
+  "egress": {
+    "title": "私网上游例外",
+    "hint": "按 IP/CIDR、协议和端口放行内核到指定上游的连接，不改变用户访问目标的限制。作用于本节点全部内核；控制 API 仍受保护。",
+    "loadFailed": "策略加载失败。",
+    "retry": "重试",
+    "requiresVersion": "请升级到 bosun {{version}} 或更新版本后配置例外。",
+    "address": "上游 IP / CIDR",
+    "port": "端口",
+    "add": "添加例外",
+    "applyHint": "保存后请在节点体检中核对防护的实际状态。节点配置文件中的例外也会生效；无需重启。"
   }
 }

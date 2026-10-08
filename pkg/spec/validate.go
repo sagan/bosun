@@ -383,6 +383,13 @@ func ValidateAuditRule(r AuditRule) error {
 // its backend. The panel and the agent run the same check, so a rule the
 // node would refuse never reaches it.
 func (f Forward) ValidateTargets() error {
+	if f.Backend == "nft" && f.Listen != "" {
+		host, _, _ := net.SplitHostPort(f.Target)
+		target, listen := net.ParseIP(host), net.ParseIP(f.Listen)
+		if target != nil && listen != nil && (target.To4() == nil) != (listen.To4() == nil) {
+			return fmt.Errorf("nft listen and target must use the same address family; use relay or realm for cross-family forwarding")
+		}
+	}
 	switch f.Balance {
 	case "", BalanceFailover, BalanceRoundRobin:
 	default:

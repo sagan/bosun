@@ -2,6 +2,7 @@ package egressguard
 
 import (
 	"context"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 	"strings"
 	"testing"
 )
@@ -11,8 +12,8 @@ func TestScriptAndApply(t *testing.T) {
 	for _, want := range []string{
 		"meta skuid 998 ip daddr { 10.10.0.0/24, 192.0.2.10/32 } accept",
 		"meta skuid 998 ip6 daddr { fd00:1::/64 } accept",
-		"meta skuid 998 ct state new ip daddr { 127.0.0.0/8, 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 } drop",
-		"meta skuid 998 ct state new ip6 daddr { ::1/128, fc00::/7, fe80::/10 } drop",
+		"meta skuid 998 ct state new ip daddr { " + strings.Join(spec.BlockedDestinationRanges(false), ", ") + " } drop",
+		"meta skuid 998 ct state new ip6 daddr { " + strings.Join(spec.BlockedDestinationRanges(true), ", ") + " } drop",
 		"meta skuid 998 ip daddr 127.0.0.0/8 tcp dport { 53, 9103 } accept",
 		"meta skuid 998 ip6 daddr ::1/128 udp dport { 53, 9103 } accept",
 	} {
@@ -29,7 +30,7 @@ func TestScriptAndApply(t *testing.T) {
 	var runs []string
 	g := &Guard{Run: func(_ context.Context, stdin, name string, args ...string) ([]byte, error) {
 		runs = append(runs, stdin)
-		return nil, nil
+		return []byte("table inet bosun_egress\n"), nil
 	}}
 	if err := g.Apply(context.Background(), 998, Options{LoopbackPorts: []int{53}}); err != nil {
 		t.Fatal(err)

@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,15 +23,19 @@ import (
 
 const nftTable = "bosun_fwd"
 
-// nftTarget is a rule's target resolved to an IPv4 literal.
+// nftTarget is a rule's target resolved to a literal address.
 type nftTarget struct {
 	IP   string
 	Port int
 }
 
-// resolveNFT turns target host:port into an IPv4 literal; host names are
-// looked up once (A record only).
+// resolveNFT preserves the IPv4 preference for dual-stack hostnames.
+// An explicit listen address selects its address family instead.
 func resolveNFT(ctx context.Context, target string) (nftTarget, error) {
+	return resolveNFTFamily(ctx, target, "")
+}
+
+func resolveNFTFamily(ctx context.Context, target, listen string) (nftTarget, error) {
 	host, portStr, err := net.SplitHostPort(target)
 	if err != nil {
 		return nftTarget{}, err
@@ -39,16 +45,30 @@ func resolveNFT(ctx context.Context, target string) (nftTarget, error) {
 		return nftTarget{}, fmt.Errorf("bad target port %q", portStr)
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if ip.To4() == nil {
-			return nftTarget{}, errors.New("nft backend needs an IPv4 target")
+		if err := (spec.Forward{Backend: "nft", Listen: listen, Target: target}).ValidateTargets(); err != nil {
+			return nftTarget{}, err
 		}
 		return nftTarget{IP: ip.String(), Port: port}, nil
 	}
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	ips, err := net.DefaultResolver.LookupIP(rctx, "ip4", host)
+	network := "ip"
+	if listen != "" {
+		network = "ip4"
+		if spec.IsIPv6(listen) {
+			network = "ip6"
+		}
+	}
+	ips, err := net.DefaultResolver.LookupIP(rctx, network, host)
 	if err != nil || len(ips) == 0 {
-		return nftTarget{}, fmt.Errorf("target %s has no A record", host)
+		return nftTarget{}, fmt.Errorf("target %s has no usable %s address", host, network)
+	}
+	if network == "ip" {
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				return nftTarget{IP: ip.String(), Port: port}, nil
+			}
+		}
 	}
 	return nftTarget{IP: ips[0].String(), Port: port}, nil
 }
@@ -64,14 +84,23 @@ func renderNFT(rules []spec.Forward, targets map[string]nftTarget) string {
 		if !ok {
 			continue
 		}
+		family := "ip"
+		if spec.IsIPv6(t.IP) {
+			family = "ip6"
+		}
 		match := ""
-		if f.Listen != "" && net.ParseIP(f.Listen) != nil && net.ParseIP(f.Listen).To4() != nil {
-			match = "ip daddr " + f.Listen + " "
+		if ip := net.ParseIP(f.Listen); ip != nil {
+			if (ip.To4() == nil) != spec.IsIPv6(t.IP) {
+				continue
+			}
+			if !ip.IsUnspecified() {
+				match = family + " daddr " + ip.String() + " "
+			}
 		}
 		for _, p := range protocols(f) {
-			pre = append(pre, fmt.Sprintf("\t\t%s%s dport %d dnat ip to %s:%d comment \"%s\"", match, p, f.Port, t.IP, t.Port, f.Tag))
+			pre = append(pre, fmt.Sprintf("\t\t%s%s dport %d dnat %s to %s comment \"%s\"", match, p, f.Port, family, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), f.Tag))
 			if !f.PreserveSource {
-				post = append(post, fmt.Sprintf("\t\tip daddr %s %s dport %d masquerade comment \"%s\"", t.IP, p, t.Port, f.Tag))
+				post = append(post, fmt.Sprintf("\t\t%s daddr %s %s dport %d masquerade comment \"%s\"", family, t.IP, p, t.Port, f.Tag))
 			}
 		}
 	}
@@ -122,13 +151,34 @@ var enableForwarding = func(ctx context.Context) error {
 	return exec.CommandContext(ctx, "sysctl", "-q", "-w", "net.ipv4.ip_forward=1").Run()
 }
 
+// Preserve hosts that learn their IPv6 default route via router advertisements:
+// Linux otherwise stops accepting RA when forwarding becomes enabled.
+var enableIPv6Forwarding = func(ctx context.Context) error {
+	paths, err := filepath.Glob("/proc/sys/net/ipv6/conf/*/accept_ra")
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(string(raw)) == "1" {
+			if err := os.WriteFile(path, []byte("2\n"), 0644); err != nil {
+				return err
+			}
+		}
+	}
+	return exec.CommandContext(ctx, "sysctl", "-q", "-w", "net.ipv6.conf.all.forwarding=1").Run()
+}
+
 // applyNFT installs the table for the rules (or removes it when empty) and
 // reports the per-rule outcome.
 func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) {
 	targets := map[string]nftTarget{}
 	errs := map[string]error{}
 	for _, f := range rules {
-		t, err := resolveNFT(ctx, f.Target)
+		t, err := resolveNFTFamily(ctx, f.Target, f.Listen)
 		if err != nil {
 			errs[f.Tag] = err
 			continue
@@ -140,11 +190,21 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) {
 	if len(rules) == 0 {
 		if m.nftApplied != "" {
 			applyErr = nftRun(ctx, script)
-			m.nftApplied = ""
+			if applyErr == nil {
+				m.nftApplied = ""
+			}
 		}
 	} else if script != m.nftApplied {
 		if err := enableForwarding(ctx); err != nil {
 			m.log.Warn("could not enable ip_forward", "err", err)
+		}
+		for _, target := range targets {
+			if spec.IsIPv6(target.IP) {
+				if err := enableIPv6Forwarding(ctx); err != nil {
+					m.log.Warn("could not enable IPv6 forwarding", "err", err)
+				}
+				break
+			}
 		}
 		applyErr = nftRun(ctx, script)
 		if applyErr == nil {
@@ -165,11 +225,10 @@ func (m *Manager) applyNFT(ctx context.Context, rules []spec.Forward) {
 		case applyErr != nil:
 			problem = applyErr
 		}
-		if problem != nil {
-			r.setProbe(false, 0, problem)
+		resolved := ""
+		if target, ok := targets[r.spec.Tag]; ok {
+			resolved = net.JoinHostPort(target.IP, strconv.Itoa(target.Port))
 		}
-		r.probeMu.Lock()
-		r.nftBroken = problem != nil
-		r.probeMu.Unlock()
+		r.setBackendTarget(problem, resolved)
 	}
 }

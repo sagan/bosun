@@ -168,7 +168,7 @@ func TestPrivateAccessLinuxCores(t *testing.T) {
 }
 
 const privateCorePython = `
-import json,sys,os,socket,struct,threading,subprocess as s,time,uuid,ssl
+import json,sys,os,socket,struct,threading,subprocess as s,time,uuid,ssl,re
 c=json.loads(sys.argv[1]); sockets=[]
 def run(*args,**kw):
  r=s.run(args,capture_output=True,text=True,**kw)
@@ -177,6 +177,13 @@ def run(*args,**kw):
 run('ip','link','set','lo','up')
 for addr in ['10.10.0.2/32','10.10.0.3/32','fd42::2/128','192.0.0.9/32','100.100.100.200/32','fd00:ec2::254/128']:
  run('ip','addr','add',addr,'dev','lo')
+def check_shaped():
+ # Older iproute2 builds mix non-JSON class output into tc -j -s.
+ # Read the stable text counter block for the real subscriber HTB class.
+ stats=run('tc','-s','class','show','dev','lo').stdout
+ block=re.search(r'(?ms)^class htb 1:2\b.*?(?=^class |\Z)',stats)
+ count=re.search(r'\bSent (\d+) bytes',block.group(0)) if block else None
+ assert count and int(count.group(1))>0,stats
 def serve(sock,udp):
  while True:
   if udp:
@@ -274,15 +281,13 @@ try:
   for addr in ['10.10.0.2','fd42::2','allowed.example.com']:
    probe(30200,addr,18080,True,udp);probe(30201,addr,18080,False,udp)
   if c['marks']:
-   counters=json.loads(run('tc','-s','-j','class','show','dev','lo').stdout)
-   assert any(x.get('handle')=='1:2' and x.get('stats',x).get('bytes',0)>0 for x in counters),counters
+   check_shaped()
   for addr,port in [('10.10.0.2',18081),('10.10.0.3',18080),('denied.example.com',18080),('127.0.0.1',19102),('100.100.100.200',18080),('fd00:ec2::254',18080)]:probe(30200,addr,port,False,udp)
   probe(30200,'192.0.0.9',18080,True,udp);probe(30201,'192.0.0.9',18080,True,udp)
  probe(30200,'10.10.0.2',18082,True);probe(30200,'10.10.0.2',18082,False,True)
  helper('stats')
  if c['marks']:
-  counters=json.loads(run('tc','-s','-j','class','show','dev','lo').stdout)
-  assert any(x.get('handle')=='1:2' and x.get('stats',x).get('bytes',0)>0 for x in counters),counters
+  check_shaped()
  tcp=connect(30200,'10.10.0.2',18080);udp=connect(30200,'10.10.0.2',18080,True)
  run('nft','-f','-',input='delete table inet bosun_egress\n'+c['revoked'])
  for sock,payload in [(tcp,b'next'),(udp,b'\x00\x04next')]:

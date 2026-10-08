@@ -16,6 +16,7 @@ Verified end to end against the manifest's tested releases (sing-box
 - Durable Captain reporting journals, structured Linux exit diagnostics with a separately rebuilt MIT GeoCheck tool, and named typed inbound/outbound/route presets with change previews. [Operation and failure boundaries](docs/DIAGNOSTICS_AND_PRESETS.md).
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
+- Default-off per-inbound private destination access for supported sing-box/Xray configurations, with CIDR/protocol/port scopes, UID/socket-mark nft enforcement and independent managed Reverse exit permissions. Existing user tc classes are retained; unsupported proxy chains and overrides are rejected. [Usage and support boundaries](#per-inbound-private-access-bosun-063--captain-114).
 - Per-inbound user lists (`spec.Inbound.ScopedUsers`): an inbound restricted to a user group only provisions that group; the mita adapter runs one instance per inbound because mita users are global to a process.
 - sing-box adapter: renders VLESS, VMess, Trojan, Shadowsocks (incl. 2022), Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive; TLS, REALITY, ws/grpc/httpupgrade/http transports, multiplex, custom outbounds with chaining, route rules.
 - Xray adapter: VLESS, VMess, Trojan, Shadowsocks (AEAD), SOCKS, HTTP over raw/ws/grpc/httpupgrade/xhttp, TLS and REALITY; **hot user add/remove** on VLESS/VMess/Trojan through HandlerService, restart otherwise; per-user stats via StatsService; config validated with `xray run -test`. Verified e2e: REALITY traffic, hot add and hot remove, per-user push.
@@ -1000,7 +1001,7 @@ REALITY test: accumulated records and differences in ClientHello or destination
 edge still require validation with the actual core and client. New result
 fields are additive; existing API clients remain compatible.
 
-### Per-inbound private access (unreleased)
+### Per-inbound private access (bosun 0.63 / Captain 1.14)
 
 In the inbound editor, use **Private access** (under **Advanced** in the
 standalone editor and reverse wizard). The default is
@@ -1022,7 +1023,7 @@ the corresponding reverse client on B enforces its own policy, independently
 of other transits. A continues tunnelling to B. Authentication and accounting
 remain on A; the existing reverse-path per-user tc limitation is unchanged.
 
-This requires an updated bosun advertising `private_access`, Linux nftables,
+This requires bosun ≥ 0.63.0 advertising `private_access`, Linux nftables,
 a non-root core account, enabled egress protection and sing-box or Xray.
 Capabilities reflect the node's runtime prerequisites. Native Hysteria, mita
 and snell-server, WireGuard inbounds, shared-key Snell and Xray SOCKS/HTTP

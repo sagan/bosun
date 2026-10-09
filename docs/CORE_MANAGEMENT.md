@@ -22,13 +22,15 @@ The agent's catalog is the source of available packages. Extending it requires r
 cores:
   singbox: {}
   singbox_extended:
-    version: 1.14.1-extended-2.7.2-r1
+    version: 1.14.1-extended-2.7.2-r2
     stats_listen: 127.0.0.1:9105
 ```
 
 The build pins [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended) at `v1.14.1-extended-2.7.2`, commit `55faa763f986f4ca8a492d9b2719bc6330d2bef5`, with `with_v2ray_api` and the tags listed in `scripts/build-singbox-extended.sh`. The upstream release binary lacks the statistics API needed for billing. Vetted dependency security updates are applied to go.mod/go.sum; upstream Go implementation files are unchanged. Published packages include corresponding source, the updated module manifests, GPL license, build instructions and checksums. No GPL implementation is copied into bosun's MIT source.
 
 Linux amd64/arm64 packages are produced by the reusable release workflow. Before those assets are published, or on other platforms, the installer can build from the pinned source when Go and git are available. The source build applies the same dependency pins. The release workflow checks the exact source/build tags for reachable vulnerabilities and exercises the real binary; a bare Go module advisory is not evidence that its affected package is compiled into the executable.
+
+The `-r2` package keeps the same upstream commit and uses Go 1.26.9 with reviewed October security dependency updates. The previous `-r1` assets remain immutable; existing explicitly activated installations retain their selection until the administrator switches versions.
 
 ### WARP outbound
 

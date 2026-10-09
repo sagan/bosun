@@ -8,7 +8,7 @@ from there (Settings → Backups and maintenance → Version and updates, or fro
 
 - **v0.64.2** (2026-10-09) — Fix WARP outbounds preventing sing-box Extended from starting (#17), including when no inbound selects WARP. Omit the unsupported WireGuard reserved field only for Extended, preserving the stored account and official sing-box/Xray behavior; no new WARP registration or core-package replacement is required.
   - Add real-core configuration checks for VLESS/SSH/Mieru with unused, default and rule-selected WARP in CI/release, plus an opt-in live Cloudflare exit and per-user/per-inbound accounting regression.
-  - Build with Go 1.26.9 and update golang.org/x/net to v0.60.0 for the October security fixes.
+  - Build with Go 1.26.9 and update golang.org/x/net to v0.60.0 for the October security fixes. Rebuild the diagnostic tool and publish Extended 1.14.1-extended-2.7.2-r2 with matching dependency pins; preserve older package assets and existing explicit selections.
 
 - **v0.64.1** (2026-10-08) — Fix managed core activation and restart under `cores.user`: prepare every runtime directory level as root-owned and traversable, including directories left by v0.64.0. Keep data-directory and outside-path permissions unchanged, reject symlink work paths, and add fresh-install and repair regression coverage.
 

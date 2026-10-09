@@ -18,6 +18,8 @@ func (a *Agent) privateAccessReady() bool {
 
 func (a *Agent) stopPrivateCores(ctx context.Context) error {
 	var errs []error
+	// Revocation must still stop sockets when statistics or storage fail.
+	errs = append(errs, a.checkpointTraffic(ctx))
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)
 		if c.Running() {
@@ -56,14 +58,6 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 	}
 	key, _ := json.Marshal(grants)
 	if string(key) != a.privatePolicyKey {
-		// Flush current counters before a security-mandated reconnect.
-		for _, name := range a.reg.Names() {
-			c, _ := a.reg.Get(name)
-			if c.Running() {
-				a.report(ctx)
-				break
-			}
-		}
 		if err := a.stopPrivateCores(ctx); err != nil {
 			return err
 		}

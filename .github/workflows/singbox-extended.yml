@@ -28,6 +28,7 @@ jobs:
         run: |
           dist/sing-box-extended-linux-amd64 version
           BOSUN_EXTENDED_TEST_BINARY="$PWD/dist/sing-box-extended-linux-amd64" go test -race ./internal/core/singbox -run 'Test(Extended|WARP)' -v -timeout 3m
+          BOSUN_EXTENDED_TEST_BINARY="$PWD/dist/sing-box-extended-linux-amd64" go test -race ./internal/agent -run '^TestRealExtendedTrafficCheckpointAndAggregates$' -v -timeout 3m
           for binary in dist/sing-box-extended-linux-*; do
             file "$binary" | grep -q 'statically linked'
             go version "$binary" | grep -q 'go1.26.9'

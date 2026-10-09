@@ -21,7 +21,8 @@ import (
 )
 
 // The sole in-flight batch is immutable. While it awaits acknowledgement,
-// counters remain in the cores instead of being appended under its sequence.
+// periodic counters remain in the cores. Lifecycle checkpoints instead append
+// to Buffered, which has never been sent and may still be coalesced.
 // There is necessarily a small gap between resetting upstream counters and
 // fsync: upstream APIs do not support transactional reads with acknowledgement.
 type trafficBatch struct {
@@ -33,12 +34,13 @@ type trafficBatch struct {
 }
 
 type trafficJournal struct {
-	Version int           `json:"version"`
-	Epoch   string        `json:"epoch"`
-	Next    uint64        `json:"next"`
-	Since   time.Time     `json:"since"`
-	Pending *trafficBatch `json:"pending,omitempty"`
-	path    string
+	Version  int           `json:"version"`
+	Epoch    string        `json:"epoch"`
+	Next     uint64        `json:"next"`
+	Since    time.Time     `json:"since"`
+	Pending  *trafficBatch `json:"pending,omitempty"`
+	Buffered *trafficBatch `json:"buffered,omitempty"`
+	path     string
 }
 
 func (a *Agent) loadTrafficJournal() error {
@@ -140,33 +142,116 @@ func (a *Agent) reportError(err error) bool {
 	return false
 }
 
+// checkpointTraffic runs on the serial agent loop before any operation that
+// can discard a core's counters. No network acknowledgement is needed for
+// Reporter drivers: an unavailable panel must not prevent safe local changes.
+func (a *Agent) checkpointTraffic(ctx context.Context) error {
+	running := false
+	for _, name := range a.reg.Names() {
+		c, _ := a.reg.Get(name)
+		running = running || c.Running()
+	}
+	if !running {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if _, ok := a.driver.(panel.Reporter); !ok {
+		if a.pendingTraffic == nil {
+			a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
+		}
+		traffic, _ := a.collectUserTraffic(ctx)
+		if a.statsCollectionErr != nil {
+			return a.statsCollectionErr
+		}
+		if err := a.driver.PushTraffic(ctx, traffic); err != nil {
+			return err
+		}
+		a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
+		return nil
+	}
+	if err := a.loadTrafficJournal(); err != nil {
+		return err
+	}
+	j := a.trafficJournal
+	// A previous failed save may have reset counters into memory. Retry it
+	// before reading/resetting any more upstream counters.
+	if err := j.save(); err != nil {
+		return err
+	}
+	batch := a.collectTrafficBatch(ctx)
+	j.Buffered = mergeTrafficBatches(j.Buffered, batch)
+	return errors.Join(j.save(), a.statsCollectionErr)
+}
+
+func (a *Agent) collectTrafficBatch(ctx context.Context) *trafficBatch {
+	a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
+	_, traffic := a.collectUserTraffic(ctx)
+	in := a.collectTagged(ctx, map[string]spec.Traffic{}, "inbound", func(c core.Core) (map[string]spec.Traffic, error) {
+		if c, ok := c.(core.InboundStatser); ok {
+			return c.InboundStats(ctx, true)
+		}
+		return nil, errSkip
+	})
+	out := a.collectTagged(ctx, map[string]spec.Traffic{}, "outbound", func(c core.Core) (map[string]spec.Traffic, error) {
+		if c, ok := c.(core.OutboundStatser); ok {
+			return c.OutboundStats(ctx, true)
+		}
+		return nil, errSkip
+	})
+	j := a.trafficJournal
+	window := max(1, int(time.Since(j.Since).Seconds()))
+	j.Since = time.Now()
+	return &trafficBatch{Window: window, Traffic: traffic, Inbounds: in, Outbounds: out}
+}
+
+func mergeTrafficBatches(old, next *trafficBatch) *trafficBatch {
+	if old == nil {
+		return next
+	}
+	sums := map[trafficKey]spec.UserTraffic{}
+	for _, list := range [][]spec.UserTraffic{old.Traffic, next.Traffic} {
+		for _, t := range list {
+			k := trafficKey{t.UserID, t.Inbound}
+			cur := sums[k]
+			cur.UserID, cur.Inbound = t.UserID, t.Inbound
+			cur.Up += t.Up
+			cur.Down += t.Down
+			sums[k] = cur
+		}
+	}
+	out := &trafficBatch{Window: old.Window + next.Window, Inbounds: map[string]spec.Traffic{}, Outbounds: map[string]spec.Traffic{}}
+	for _, t := range sums {
+		out.Traffic = append(out.Traffic, t)
+	}
+	merge := func(dst, src map[string]spec.Traffic) {
+		for tag, t := range src {
+			cur := dst[tag]
+			cur.Up += t.Up
+			cur.Down += t.Down
+			dst[tag] = cur
+		}
+	}
+	merge(out.Inbounds, old.Inbounds)
+	merge(out.Inbounds, next.Inbounds)
+	merge(out.Outbounds, old.Outbounds)
+	merge(out.Outbounds, next.Outbounds)
+	return out
+}
+
 func (a *Agent) reportDurable(ctx context.Context, reporter panel.Reporter) bool {
 	if err := a.loadTrafficJournal(); err != nil {
 		return a.reportError(err)
 	}
 	j := a.trafficJournal
 	if j.Pending == nil {
-		a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
-		_, traffic := a.collectUserTraffic(ctx)
-		in := a.collectTagged(ctx, map[string]spec.Traffic{}, "inbound", func(c core.Core) (map[string]spec.Traffic, error) {
-			if c, ok := c.(core.InboundStatser); ok {
-				return c.InboundStats(ctx, true)
-			}
-			return nil, errSkip
-		})
-		out := a.collectTagged(ctx, map[string]spec.Traffic{}, "outbound", func(c core.Core) (map[string]spec.Traffic, error) {
-			if c, ok := c.(core.OutboundStatser); ok {
-				return c.OutboundStats(ctx, true)
-			}
-			return nil, errSkip
-		})
-		window := int(time.Since(j.Since).Seconds())
-		if window < 1 {
-			window = 1
-		}
-		j.Pending = &trafficBatch{Seq: j.Next, Window: window, Traffic: traffic, Inbounds: in, Outbounds: out}
-		j.Since = time.Now()
+		batch := a.collectTrafficBatch(ctx)
+		j.Buffered = mergeTrafficBatches(j.Buffered, batch)
+		j.Pending = j.Buffered
+		j.Pending.Seq = j.Next
+		j.Buffered = nil
 	}
+
 	// Always save before sending, including a retry after a failed fsync.
 	if err := j.save(); err != nil {
 		return a.reportError(err)

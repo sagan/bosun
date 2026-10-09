@@ -33,6 +33,8 @@ type State struct {
 	PresetSequence      int64               `json:"preset_sequence,omitempty"`
 	Revision            int64               `json:"revision"`
 	UserTrafficSequence int64               `json:"user_traffic_sequence,omitempty"`
+	TrafficEpoch        string              `json:"traffic_epoch,omitempty"`
+	TrafficSeq          uint64              `json:"traffic_seq,omitempty"`
 
 	Admin Admin `json:"admin"`
 	// APITokens grant the same access as the admin login (standalone only).

@@ -154,11 +154,31 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(s.path), ".local-state-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	defer os.Remove(f.Name())
+	if _, err = f.Write(raw); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if err = os.Rename(f.Name(), s.path); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(s.path))
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return dir.Sync()
 }
 
 // commit bumps the revision, persists and wakes the agent. Callers hold s.mu.
@@ -979,6 +999,22 @@ func (s *Store) Forwards(ctx context.Context) ([]spec.Forward, bool, error) {
 func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	sequenced := rep.TrafficEpoch != "" && rep.TrafficSeq > 0
+	duplicate := sequenced && s.st.TrafficEpoch == rep.TrafficEpoch && rep.TrafficSeq <= s.st.TrafficSeq
+	// Receipts and counters share the same saved state. Failed saves must
+	// restore in-memory totals too, otherwise the retry would charge twice.
+	previous := s.st
+	previous.Users = append([]User(nil), s.st.Users...)
+	previous.Inbounds = append([]Inbound(nil), s.st.Inbounds...)
+	previous.OutboundTraffic = make(map[string]spec.Traffic, len(s.st.OutboundTraffic))
+	for tag, t := range s.st.OutboundTraffic {
+		previous.OutboundTraffic[tag] = t
+	}
+	if duplicate {
+		rep.Traffic, rep.Inbounds, rep.Outbounds = nil, nil, nil
+	} else if sequenced {
+		s.st.TrafficEpoch, s.st.TrafficSeq = rep.TrafficEpoch, rep.TrafficSeq
+	}
 	now := time.Now()
 	byID := map[int64]int{}
 	for i, u := range s.st.Users {
@@ -1000,9 +1036,6 @@ func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error)
 		if wasUsable != u.Usable(now) {
 			changed = true
 		}
-	}
-	if dayUp+dayDown > 0 {
-		s.addHistory(now, dayUp, dayDown)
 	}
 	for tag, t := range rep.Outbounds {
 		if s.st.OutboundTraffic == nil {
@@ -1035,13 +1068,20 @@ func (s *Store) Report(ctx context.Context, rep agentproto.Report) (bool, error)
 	s.cores = rep.Cores
 	s.forwardStatus = rep.Forwards
 	s.lastReport = now
+	var err error
 	if changed {
-		return true, s.commit()
+		err = s.commit()
+	} else if sequenced && !duplicate || len(rep.Traffic) > 0 || len(rep.Inbounds) > 0 || len(rep.Outbounds) > 0 {
+		err = s.saveLocked()
 	}
-	if len(rep.Traffic) > 0 || len(rep.Inbounds) > 0 || len(rep.Outbounds) > 0 {
-		return false, s.saveLocked()
+	if err != nil {
+		s.st = previous
+		return false, err
 	}
-	return false, nil
+	if dayUp+dayDown > 0 {
+		s.addHistory(now, dayUp, dayDown)
+	}
+	return changed, nil
 }
 
 func (s *Store) addHistory(now time.Time, up, down int64) {

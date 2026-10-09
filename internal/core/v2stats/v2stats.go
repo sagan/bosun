@@ -17,16 +17,7 @@ import (
 // QueryUsers calls QueryStats(pattern, reset) on method and returns traffic
 // keyed by user name. Counter names look like "user>>>NAME>>>traffic>>>uplink".
 func QueryUsers(ctx context.Context, conn *grpc.ClientConn, method, pattern string, reset bool) (map[string]spec.Traffic, error) {
-	// QueryStatsRequest { pattern = 1; reset = 2 }
-	var req []byte
-	if pattern != "" {
-		req = protowire.AppendTag(req, 1, protowire.BytesType)
-		req = protowire.AppendString(req, pattern)
-	}
-	if reset {
-		req = protowire.AppendTag(req, 2, protowire.VarintType)
-		req = protowire.AppendVarint(req, 1)
-	}
+	req := queryRequest(pattern, reset)
 	resp, err := grpcraw.Invoke(ctx, conn, method, req)
 	if err != nil {
 		return nil, err
@@ -37,15 +28,7 @@ func QueryUsers(ctx context.Context, conn *grpc.ClientConn, method, pattern stri
 // QueryInbounds is QueryUsers for per-inbound counters
 // ("inbound>>>TAG>>>traffic>>>uplink"), keyed by inbound tag.
 func QueryInbounds(ctx context.Context, conn *grpc.ClientConn, method, pattern string, reset bool) (map[string]spec.Traffic, error) {
-	var req []byte
-	if pattern != "" {
-		req = protowire.AppendTag(req, 1, protowire.BytesType)
-		req = protowire.AppendString(req, pattern)
-	}
-	if reset {
-		req = protowire.AppendTag(req, 2, protowire.VarintType)
-		req = protowire.AppendVarint(req, 1)
-	}
+	req := queryRequest(pattern, reset)
 	resp, err := grpcraw.Invoke(ctx, conn, method, req)
 	if err != nil {
 		return nil, err
@@ -55,20 +38,30 @@ func QueryInbounds(ctx context.Context, conn *grpc.ClientConn, method, pattern s
 
 // QueryOutbounds is QueryUsers for per-outbound counters, keyed by tag.
 func QueryOutbounds(ctx context.Context, conn *grpc.ClientConn, method, pattern string, reset bool) (map[string]spec.Traffic, error) {
-	var req []byte
-	if pattern != "" {
-		req = protowire.AppendTag(req, 1, protowire.BytesType)
-		req = protowire.AppendString(req, pattern)
-	}
-	if reset {
-		req = protowire.AppendTag(req, 2, protowire.VarintType)
-		req = protowire.AppendVarint(req, 1)
-	}
+	req := queryRequest(pattern, reset)
 	resp, err := grpcraw.Invoke(ctx, conn, method, req)
 	if err != nil {
 		return nil, err
 	}
 	return decodeKind(resp, "outbound")
+}
+
+// Both fields describe the same filter: Xray uses field 1; sing-box and
+// Extended use repeated field 3 and ignore field 1. Sending only field 1
+// makes sing-box reset every category, even though we decode just one.
+func queryRequest(pattern string, reset bool) []byte {
+	var req []byte
+	if pattern != "" {
+		for _, field := range []protowire.Number{1, 3} {
+			req = protowire.AppendTag(req, field, protowire.BytesType)
+			req = protowire.AppendString(req, pattern)
+		}
+	}
+	if reset {
+		req = protowire.AppendTag(req, 2, protowire.VarintType)
+		req = protowire.AppendVarint(req, 1)
+	}
+	return req
 }
 
 // DecodeUsers parses QueryStatsResponse { repeated Stat stat = 1 } where

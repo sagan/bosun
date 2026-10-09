@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/core"
-	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -171,6 +170,7 @@ func (a *Agent) activateCore(runCtx, ctx context.Context, r spec.CoreRequest) er
 		return rollback(err)
 	}
 	a.reg.Replace(r.Distribution, next)
+	a.rememberCoreUsers(r.Distribution, inbounds)
 	a.statusMu.Lock()
 	if a.appliedCores == nil {
 		a.appliedCores = map[string][]string{}
@@ -227,37 +227,8 @@ func (a *Agent) drainBeforeCoreChange(ctx context.Context, c core.Core) error {
 	if _, err := c.Stats(ctx, false); err != nil {
 		return fmt.Errorf("cannot read old core counters: %w", err)
 	}
-	if _, ok := a.driver.(panel.Reporter); ok {
-		// Finish any existing durable batch, then collect the counters accrued
-		// while it was in flight. Failed delivery keeps the old core running.
-		a.statsCollectionErr = nil
-		a.report(ctx)
-		if a.statsCollectionErr != nil {
-			return fmt.Errorf("cannot collect traffic before switch: %w", a.statsCollectionErr)
-		}
-		if a.trafficJournal == nil || a.trafficJournal.Pending != nil {
-			return errors.New("deliver pending traffic before switching cores")
-		}
-		a.statsCollectionErr = nil
-		a.report(ctx)
-		if a.statsCollectionErr != nil {
-			return fmt.Errorf("cannot collect traffic before switch: %w", a.statsCollectionErr)
-		}
-		if a.trafficJournal == nil || a.trafficJournal.Pending != nil {
-			return errors.New("deliver current traffic before switching cores")
-		}
-		return nil
+	if err := a.checkpointTraffic(ctx); err != nil {
+		return fmt.Errorf("save traffic before switching cores: %w", err)
 	}
-	if a.pendingTraffic == nil {
-		a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
-	}
-	traffic, _ := a.collectUserTraffic(ctx)
-	if a.statsCollectionErr != nil {
-		return fmt.Errorf("cannot collect traffic before switch: %w", a.statsCollectionErr)
-	}
-	if err := a.driver.PushTraffic(ctx, traffic); err != nil {
-		return fmt.Errorf("save traffic before switching: %w", err)
-	}
-	a.pendingTraffic = map[trafficKey]*spec.UserTraffic{}
 	return nil
 }

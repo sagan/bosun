@@ -136,6 +136,9 @@ type Agent struct {
 	pendingTraffic  map[trafficKey]*spec.UserTraffic
 	pendingInbound  map[string]spec.Traffic
 	pendingOutbound map[string]spec.Traffic
+	// Keep the identities of each successfully applied core, not the latest
+	// desired users: a failed apply must still bill the old process correctly.
+	coreUserIDs map[string]map[string]int64
 	// counters for /metrics
 	applyErrors, reportFailures atomic.Int64
 	lastApplyOK, lastReportOK   atomic.Int64 // unix seconds
@@ -568,6 +571,13 @@ func with(l map[string]string, k, v string) map[string]string {
 }
 
 func (a *Agent) stopAll() {
+	// Run's context has already been cancelled; child processes are still
+	// alive until Stop. Persist their final sample before closing the driver.
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := a.checkpointTraffic(drainCtx); err != nil {
+		a.log.Error("could not checkpoint traffic before shutdown", "err", err)
+	}
+	drainCancel()
 	if c, ok := a.driver.(interface{ Close() error }); ok {
 		_ = c.Close()
 	}

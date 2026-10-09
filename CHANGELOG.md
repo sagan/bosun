@@ -6,6 +6,10 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.64.3** (2026-10-09) — Preserve collected traffic before configuration reloads, disabling cores, package switches and graceful shutdown. Keep unsent checkpoints separate from immutable reports awaiting acknowledgement; retry without double billing in Captain and standalone mode, and attribute counters to the users actually applied to the running core.
+  - Fix native inbound/outbound totals for official sing-box and Extended, including SSH: send the statistics filter in each implementation's supported protobuf field so reading user counters does not reset other categories.
+  - Ship `KillMode=mixed` in the systemd unit so bosun can collect its children before they stop. Existing installations need the unit update described in `docs/CORE_MANAGEMENT.md`; binary self-update alone does not update service units. Add real Extended reload/shutdown accounting regression to CI and release checks.
+
 - **v0.64.2** (2026-10-09) — Fix WARP outbounds preventing sing-box Extended from starting (#17), including when no inbound selects WARP. Omit the unsupported WireGuard reserved field only for Extended, preserving the stored account and official sing-box/Xray behavior; no new WARP registration or core-package replacement is required.
   - Add real-core configuration checks for VLESS/SSH/Mieru with unused, default and rule-selected WARP in CI/release, plus an opt-in live Cloudflare exit and per-user/per-inbound accounting regression.
   - Build with Go 1.26.9 and update golang.org/x/net to v0.60.0 for the October security fixes. Rebuild the diagnostic tool and publish Extended 1.14.1-extended-2.7.2-r2 with matching dependency pins; preserve older package assets and existing explicit selections.

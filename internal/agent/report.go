@@ -64,13 +64,17 @@ func (a *Agent) collectUserTraffic(ctx context.Context) (perUser, perInbound []s
 			a.log.Warn("stats failed", "core", name, "err", err)
 			continue
 		}
+		ids := a.coreUserIDs[name]
+		if ids == nil {
+			ids = a.userIDs
+		}
 		for key, t := range stats {
 			if t.Up == 0 && t.Down == 0 {
 				continue
 			}
 			// Cores count per inbound ("name|tag") where they can.
 			userName, tag := spec.SplitInboundUser(key)
-			id, ok := a.userIDs[userName]
+			id, ok := ids[userName]
 			if !ok {
 				continue
 			}
@@ -117,8 +121,8 @@ func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traff
 			continue
 		}
 		if err != nil {
+			a.statsCollectionErr = errors.Join(a.statsCollectionErr, err)
 			a.log.Debug(kind+" stats failed", "core", name, "err", err)
-			continue
 		}
 		for tag, t := range stats {
 			if t.Up == 0 && t.Down == 0 || tag == "api" || tag == "block" {

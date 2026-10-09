@@ -8,11 +8,30 @@ An inbound selects a protocol and an adapter using the existing `core` field. Co
 2. Select **Activate / switch**, review the interruption notice, and confirm.
 3. Select that core in an inbound's editor, or retain automatic selection for existing supported protocols.
 
-A switch serializes with configuration application and reporting. It checks the inventory revision and configuration compatibility, validates sing-box/Xray configurations with the candidate binary, delivers outstanding traffic, stops the old instance and waits for the new instance's statistics API. Failed startup or selection persistence restores the old instance and reports the error. Other adapters validate their rendered model and then use startup/readiness checks. Switching interrupts connections served by that distribution. It cannot atomically stop network traffic and persist counters; existing traffic-journal failure boundaries still apply.
+A switch serializes with configuration application and reporting. It checks the inventory revision and configuration compatibility, validates sing-box/Xray configurations with the candidate binary, checkpoints outstanding traffic, stops the old instance and waits for the new instance's statistics API. Failed startup or selection persistence restores the old instance and reports the error. Other adapters validate their rendered model and then use startup/readiness checks. Switching interrupts connections served by that distribution. It cannot atomically stop network traffic and persist counters; the boundaries below still apply.
 
 Successful selections and preference order persist in `<data_dir>/cores/active.json`; downloaded executables are under `<data_dir>/cores/<distribution>/<version>/`. New UI-enabled distributions are appended to the preference order. A switch that would move existing automatically assigned inbounds to another core is rejected; pin them first. A failed configuration apply must be resolved before switching. These files are installation state, separate from the standalone configuration backup; preserve the data volume or reselect cores when restoring on a new host. An explicit `config.yaml` binary path remains an administrator pin and cannot be replaced through the UI.
 
 The agent's catalog is the source of available packages. Extending it requires reviewing the upstream format, adapter capabilities, platform assets, checksums and runtime tests. Updating the inventory never silently activates a release. Concurrent activation requests, stale revisions and expired tasks are rejected. Successful replayed jobs do not restart the core again.
+
+## Traffic accounting during changes
+
+With Captain or the standalone driver, bosun collects running core counters before applying configuration changes, disabling cores, switching packages and graceful shutdown. It fsyncs them to the private traffic journal before proceeding. An unavailable panel does not prevent these local checkpoints: a report already sent retains its original sequence and contents, while newer unsent checkpoints accumulate separately. After acknowledgement, they form the next report. The standalone store saves its receipt with user and aggregate totals so replay after a restart does not charge twice. Counter identities and sing-box aliases remain tied to the last successfully applied configuration, including when a new render or apply fails.
+
+Reading user statistics resets only user counters. Official sing-box and Extended use a different protobuf filter field from Xray; bosun sends both supported forms so subsequent native inbound and outbound totals remain available. No estimated totals are substituted for the core's counters.
+
+The supplied systemd unit uses `KillMode=mixed`: systemd initially signals bosun, allowing it to checkpoint and stop its children, then kills any remaining processes if the stop timeout expires. **Existing service units are not changed by binary self-update.** After installing a version containing this fix, add the following using `sudo systemctl edit bosun` if the effective unit still uses the default `control-group` mode:
+
+```ini
+[Service]
+KillMode=mixed
+```
+
+Run `sudo systemctl daemon-reload` and check `systemctl show bosun -p KillMode`. Keep the normal service stop timeout long enough for the ten-second checkpoint and child shutdown. Process managers and containers likewise need to let bosun handle termination before killing its cores. The first upgrade from an old binary cannot retroactively collect counters that the old shutdown path discards.
+
+A failed statistics read or journal save defers ordinary changes; private-access revocation still stops old sockets even when accounting cannot be saved. This is not a guarantee against arbitrary crashes, SIGKILL, disk failure or power loss: upstream read/reset and local fsync are separate operations, and bytes arriving after the final sample but before the core stops may be lost. Xboard's legacy push protocol does not gain durable receipts. Standalone daily graph history is a separate file from receipt-protected quota and aggregate totals. Before downgrading to an older bosun, stop client traffic and allow pending and buffered batches to be acknowledged; older binaries do not understand the new buffered checkpoints.
+
+The real Extended regression runs with `BOSUN_EXTENDED_TEST_BINARY=/path/to/sing-box go test -race ./internal/agent -run '^TestRealExtendedTrafficCheckpointAndAggregates$' -v`. It uses local SSH/echo traffic to check immediate reload/shutdown, lost-response replay, identities and native user/inbound/outbound counters. CI downloads the reviewed package with `BOSUN_TEST_DOWNLOAD_CORES=1` for this test; it does not use WARP credentials or alter host firewall rules.
 
 ## sing-box Extended
 

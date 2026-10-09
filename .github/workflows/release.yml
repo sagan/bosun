@@ -36,6 +36,8 @@ jobs:
       - run: go test -race ./...
       - name: WARP configuration against both real sing-box distributions
         run: BOSUN_TEST_DOWNLOAD_CORES=1 go test -race ./internal/core/singbox -run '^TestWARPRealConfigs$' -v -timeout 5m
+      - name: Real Extended reload accounting and native aggregates
+        run: BOSUN_TEST_DOWNLOAD_CORES=1 go test -race ./internal/agent -run '^TestRealExtendedTrafficCheckpointAndAggregates$' -v -timeout 5m
       - name: Real private-access cores in isolated Linux namespaces
         run: |
           sudo apt-get update -qq

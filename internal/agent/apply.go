@@ -143,6 +143,13 @@ func withSkip(m map[string]string, tag, reason string) map[string]string {
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
+	if err := a.checkpointTraffic(ctx); err != nil {
+		// A failed disk/stats read must not hold revoked private access open.
+		if a.privatePolicyActive || a.node.HasPrivateAccess() {
+			return errors.Join(err, a.stopPrivateCores(ctx))
+		}
+		return err
+	}
 	if err := a.node.ValidatePrivateAccessNode(); err != nil {
 		if a.privatePolicyActive || a.node.HasPrivateAccess() {
 			return errors.Join(err, a.stopPrivateCores(ctx))
@@ -342,8 +349,25 @@ func (a *Agent) applyCore(ctx context.Context, name string, node *spec.Node, inb
 	if err != nil {
 		return fmt.Errorf("%s: %w", name, err)
 	}
+	a.rememberCoreUsers(name, inbounds)
 	a.log.Info("core applied", "core", name, "inbounds", len(inbounds), "users", len(a.users))
 	return nil
+}
+
+func (a *Agent) rememberCoreUsers(name string, inbounds []spec.Inbound) {
+	if a.coreUserIDs == nil {
+		a.coreUserIDs = map[string]map[string]int64{}
+	}
+	ids := map[string]int64{}
+	for _, u := range a.users {
+		ids[u.Name] = u.ID
+	}
+	for _, ib := range inbounds {
+		for _, u := range ib.EffectiveUsers(a.users) {
+			ids[u.Name] = u.ID
+		}
+	}
+	a.coreUserIDs[name] = ids
 }
 
 // needsHTTP01 reports whether anything on this node asks for a certificate

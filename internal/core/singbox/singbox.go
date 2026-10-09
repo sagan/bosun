@@ -55,6 +55,21 @@ type Core struct {
 	online *onlineTracker // client IPs per user, from the log (see online.go)
 }
 
+type accountingState struct {
+	names          map[string]bool
+	aliases        map[string]string
+	inboundAliases map[string]string
+}
+
+func (c *Core) commitAccounting(b *core.Bundle) {
+	if st, ok := b.Payload.(*accountingState); ok {
+		c.mu.Lock()
+		c.aliases, c.inboundAliases = st.aliases, st.inboundAliases
+		c.mu.Unlock()
+		c.online.setUsers(st.names)
+	}
+}
+
 // New returns an adapter; the binary must exist but is not started.
 func New(opt Options, log *slog.Logger) (*Core, error) {
 	if opt.Distribution == "" {
@@ -130,7 +145,6 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 			names[u.Name] = true
 		}
 	}
-	c.online.setUsers(names)
 	// Device limits need the per-connection log lines, which only exist at
 	// level info; raise the level while any user carries a limit.
 	limited := false
@@ -144,10 +158,7 @@ func (c *Core) Render(node *spec.Node, inbounds []spec.Inbound, users []spec.Use
 	if err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
-	c.aliases, c.inboundAliases = aliases, inboundAliases
-	c.mu.Unlock()
-	return &core.Bundle{Files: map[string][]byte{"config.json": cfg}, Main: "config.json"}, nil
+	return &core.Bundle{Files: map[string][]byte{"config.json": cfg}, Main: "config.json", Payload: &accountingState{names, aliases, inboundAliases}}, nil
 }
 
 func (c *Core) configPath(b *core.Bundle) string { return filepath.Join(c.opt.WorkDir, b.Main) }
@@ -182,12 +193,19 @@ func (c *Core) Start(ctx context.Context, b *core.Bundle) error {
 		return err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.sup == nil {
 		c.sup = subprocess.New("sing-box", c.opt.Binary, []string{"run", "-c", path, "-D", c.opt.WorkDir, "--disable-color"}, c.opt.WorkDir, c.log).WithMarking().WithLineHook(c.online.feed).WithLogFilter(c.keepLine)
 	}
+	sup := c.sup
+	c.mu.Unlock()
+	if err := sup.Start(ctx); err != nil {
+		return err
+	}
+	c.commitAccounting(b)
+	c.mu.Lock()
 	c.applied = b.Files[b.Main]
-	return c.sup.Start(ctx)
+	c.mu.Unlock()
+	return nil
 }
 
 var levelRe = regexp.MustCompile(`\b(TRACE|DEBUG|INFO|WARN|ERROR|FATAL|PANIC)\b`)
@@ -225,6 +243,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	// identical config must not cut every user's connections just
 	// because another core's apply keeps failing and the agent retries.
 	if next := b.Files[b.Main]; applied != nil && bytes.Equal(applied, next) && sup.Running() {
+		c.commitAccounting(b)
 		c.log.Info("config unchanged, keeping the running process")
 		return nil
 	}
@@ -232,6 +251,7 @@ func (c *Core) Apply(ctx context.Context, b *core.Bundle) error {
 	if err := sup.Restart(ctx); err != nil {
 		return err
 	}
+	c.commitAccounting(b)
 	c.mu.Lock()
 	c.applied = b.Files[b.Main]
 	c.mu.Unlock()

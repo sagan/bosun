@@ -14,10 +14,9 @@ import (
 // the wire, not the proto's experimental.v2rayapi package.
 const queryStatsMethod = "/v2ray.core.app.stats.command.StatsService/QueryStats"
 
-// queryUserStats returns per-user traffic keyed by user name. With reset the
-// counters are zeroed server-side after being read. sing-box ignores the
-// pattern field unless patterns are set, so all counters come back and
-// v2stats keeps the user ones.
+// queryUserStats resets only user counters. sing-box matches patterns (field 3),
+// not the legacy pattern field; an empty filter would also consume the inbound
+// and outbound counters before their collectors can read them.
 func queryUserStats(ctx context.Context, conn *grpc.ClientConn, reset bool) (map[string]spec.Traffic, error) {
-	return v2stats.QueryUsers(ctx, conn, queryStatsMethod, "", reset)
+	return v2stats.QueryUsers(ctx, conn, queryStatsMethod, "user>>>", reset)
 }

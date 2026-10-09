@@ -73,7 +73,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	var endpoints []any
 	for _, o := range node.Outbounds {
 		if o.WARP != nil {
-			endpoints = append(endpoints, renderWARP(o))
+			endpoints = append(endpoints, renderWARP(o, opt.Distribution))
 			continue
 		}
 		if o.Balancer != nil {
@@ -643,7 +643,7 @@ func ss2022UserKey(uuid string, n int) string {
 
 // renderWARP is a sing-box WireGuard endpoint to Cloudflare WARP; route
 // rules and the final outbound may name its tag like any outbound.
-func renderWARP(o spec.Outbound) m {
+func renderWARP(o spec.Outbound, distribution string) m {
 	w := o.WARP
 	host, port := "engage.cloudflareclient.com", 2408
 	if w.Endpoint != "" {
@@ -655,7 +655,10 @@ func renderWARP(o spec.Outbound) m {
 		}
 	}
 	peer := m{"address": host, "port": port, "public_key": w.PeerPublicKey, "allowed_ips": []string{"0.0.0.0/0", "::/0"}, "persistent_keepalive_interval": 25}
-	if len(w.Reserved) == 3 {
+	// Extended's WireGuard implementation has no reserved-byte option (its
+	// native WARP endpoint uses the same transport). Keep the registered
+	// account intact for official sing-box/Xray; adapt only this instance.
+	if distribution != "singbox-extended" && len(w.Reserved) == 3 {
 		peer["reserved"] = w.Reserved
 	}
 	out := m{"type": "wireguard", "tag": o.Tag, "mtu": 1280, "address": w.Addresses, "private_key": w.PrivateKey, "peers": []m{peer}}

@@ -11,7 +11,14 @@ mkdir -p "$out"
 out=$(cd "$out" && pwd)
 module=github.com/remnawave/geocheck
 version=v0.3.0
-source_dir=$(go mod download -json "$module@$version" | python3 -c 'import json,sys; print(json.load(sys.stdin)["Dir"])')
+cached_source=$(go mod download -json "$module@$version" | python3 -c 'import json,sys; print(json.load(sys.stdin)["Dir"])')
+# Keep the downloaded module cache immutable; update only the reviewed
+# dependency needed by October's HTTP/2 security fixes in a temporary copy.
+source_dir=$(mktemp -d)
+trap 'rm -rf "$source_dir"' EXIT
+cp -R "$cached_source/." "$source_dir/"
+chmod -R u+w "$source_dir"
+go -C "$source_dir" get golang.org/x/net@v0.60.0
 for arch in amd64 arm64; do
   CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOFLAGS=-mod=readonly \
     go build -C "$source_dir" -trimpath \

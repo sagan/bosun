@@ -6,6 +6,10 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.64.2** (2026-10-09) — Fix WARP outbounds preventing sing-box Extended from starting (#17), including when no inbound selects WARP. Omit the unsupported WireGuard reserved field only for Extended, preserving the stored account and official sing-box/Xray behavior; no new WARP registration or core-package replacement is required.
+  - Add real-core configuration checks for VLESS/SSH/Mieru with unused, default and rule-selected WARP in CI/release, plus an opt-in live Cloudflare exit and per-user/per-inbound accounting regression.
+  - Build with Go 1.26.9 and update golang.org/x/net to v0.60.0 for the October security fixes.
+
 - **v0.64.1** (2026-10-08) — Fix managed core activation and restart under `cores.user`: prepare every runtime directory level as root-owned and traversable, including directories left by v0.64.0. Keep data-directory and outside-path permissions unchanged, reject symlink work paths, and add fresh-install and repair regression coverage.
 
 - **v0.64.0** (2026-10-08) — Separate core packages and active instances; add reviewed-version download/activation, persistent selection, stale-operation protection and startup rollback in Captain-managed and standalone modes. Add sing-box Extended, per-inbound Mieru accounting and SSH TCP proxy support with persistent host-key pins, supported subscription output and Linux isolation tests.

@@ -27,10 +27,10 @@ jobs:
       - name: Verify runtime and per-user accounting
         run: |
           dist/sing-box-extended-linux-amd64 version
-          BOSUN_EXTENDED_TEST_BINARY="$PWD/dist/sing-box-extended-linux-amd64" go test -race ./internal/core/singbox -run TestExtended -v -timeout 3m
+          BOSUN_EXTENDED_TEST_BINARY="$PWD/dist/sing-box-extended-linux-amd64" go test -race ./internal/core/singbox -run 'Test(Extended|WARP)' -v -timeout 3m
           for binary in dist/sing-box-extended-linux-*; do
             file "$binary" | grep -q 'statically linked'
-            go version "$binary" | grep -q 'go1.26.8'
+            go version "$binary" | grep -q 'go1.26.9'
           done
           cd dist
           sha256sum sing-box-extended-* > SHA256SUMS
@@ -48,11 +48,11 @@ jobs:
         if: inputs.publish
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
-          tag=singbox-extended-1.14.1-extended-2.7.2-r1
+          tag=singbox-extended-1.14.1-extended-2.7.2-r2
           if gh release view "$tag" >/dev/null 2>&1; then
             echo 'Package already published; retaining the existing assets.'
           else
             gh release create "$tag" --prerelease \
-              --title 'sing-box Extended 1.14.1-extended-2.7.2-r1 (bosun build)' \
+              --title 'sing-box Extended 1.14.1-extended-2.7.2-r2 (bosun build)' \
               --notes-file dist/sing-box-extended-BUILD.txt dist/*
           fi

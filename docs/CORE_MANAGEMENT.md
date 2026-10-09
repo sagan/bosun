@@ -30,6 +30,12 @@ The build pins [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box
 
 Linux amd64/arm64 packages are produced by the reusable release workflow. Before those assets are published, or on other platforms, the installer can build from the pinned source when Go and git are available. The source build applies the same dependency pins. The release workflow checks the exact source/build tags for reachable vulnerabilities and exercises the real binary; a bare Go module advisory is not evidence that its affected package is compiled into the executable.
 
+### WARP outbound
+
+Both sing-box distributions reuse bosun's registered or manually supplied WARP credentials. Extended's WireGuard endpoint does not accept the official `reserved` option, so bosun omits it only from that instance's generated configuration. The stored account and the official sing-box/Xray configuration keep those bytes. No account re-registration or core-package replacement is needed for this adapter fix.
+
+CI checks default, rule-selected and unused WARP configurations with the real pinned binaries, including Extended SSH and Mieru. A separate live check is available with `BOSUN_EXTENDED_TEST_BINARY=/path/to/sing-box BOSUN_WARP_TEST_ACCOUNT=/private/account.json go test ./internal/core/singbox -run '^TestExtendedLiveWARP$' -v`. It reads a `spec.WARPAccount` JSON file without modifying it, verifies direct/WARP egress using Cloudflare's trace response and checks SSH per-user/per-inbound traffic counters. Keep that account file private and outside the repository; the test never registers an account or changes host routing.
+
 ### Mieru
 
 Select `singbox-extended` explicitly; automatic selection continues to use the existing Mieru adapter. TCP, UDP and BOTH are supported. BOTH uses adjacent ports, preserving the existing subscription convention. The embedded upstream implementation cannot bind a specific listener IP: direct binds and NAT/IPLC ingress binds are rejected; use `mita` for those installations.

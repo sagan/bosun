@@ -2,7 +2,7 @@ module github.com/zeptop-dev/bosun
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/caddyserver/certmagic v0.25.6
@@ -11,7 +11,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.9
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.57.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1

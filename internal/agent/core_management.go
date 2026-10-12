@@ -27,6 +27,9 @@ func (a *Agent) CoreInventory() *spec.CoreInventory {
 // ManageCore downloads in a worker but serializes activation with apply and
 // reporting. An expired request never becomes a delayed surprise restart.
 func (a *Agent) ManageCore(ctx context.Context, r spec.CoreRequest) error {
+	if a.MonitorOnly() || a.modeChanging.Load() {
+		return spec.ErrMonitorOnly
+	}
 	m := a.CoreManager
 	if m == nil {
 		return errors.New("core management is unavailable")
@@ -35,6 +38,9 @@ func (a *Agent) ManageCore(ctx context.Context, r spec.CoreRequest) error {
 		return errors.New("another core operation is in progress")
 	}
 	defer m.Unlock()
+	if a.modeChanging.Load() {
+		return spec.ErrMonitorOnly
+	}
 	if m.AlreadyApplied(r) {
 		return nil
 	}

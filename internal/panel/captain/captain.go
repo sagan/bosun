@@ -200,7 +200,7 @@ func (c *Client) doClient(ctx context.Context, hc *http.Client, method, path str
 // reported before the node switches modes.
 func (c *Client) Pair(ctx context.Context) error {
 	host, _ := os.Hostname()
-	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/pair", agentproto.PairRequest{
+	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/pair", agentproto.PairRequest{NodeModes: true,
 		Code: c.cfg.PairCode, Hostname: host, Version: c.cfg.Version, Platform: runtime.GOOS + "/" + runtime.GOARCH,
 	}, nil)
 	if err != nil {
@@ -266,6 +266,10 @@ func (c *Client) fetchWait(ctx context.Context, wait string) (bool, error) {
 		return false, fmt.Errorf("captain: decode state: %w", err)
 	}
 	c.mu.Lock()
+	if c.state != nil && st.Node.ModeRevision < c.state.Node.ModeRevision {
+		c.mu.Unlock()
+		return false, nil
+	}
 	c.state, c.etag = &st, h.Get("ETag")
 	c.mu.Unlock()
 	return true, nil

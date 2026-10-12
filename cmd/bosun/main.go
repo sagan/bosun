@@ -56,6 +56,7 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/hostupdate"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
+	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // newUpdater returns the self-update client for this binary. minVersion
@@ -226,14 +227,16 @@ func setup(args []string) (*env, error) {
 		return nil, err
 	}
 
-	if err := runas.Set(cfg.Cores.User); err != nil {
-		// Degrade instead of refusing to start: a node whose agent will
-		// not run cannot be fixed from the panel either. The doctor's
-		// isolation check reports it.
-		log.Error("cores.user unusable, running cores as bosun itself", "user", cfg.Cores.User, "err", err)
-		runas.SetError(err.Error())
-	} else if cfg.Cores.User != "" {
-		log.Info("cores run as an unprivileged account", "user", cfg.Cores.User)
+	if cfg.NodeMode != spec.NodeMonitor {
+		if err := runas.Set(cfg.Cores.User); err != nil {
+			// Degrade instead of refusing to start: a node whose agent will
+			// not run cannot be fixed from the panel either. The doctor's
+			// isolation check reports it.
+			log.Error("cores.user unusable, running cores as bosun itself", "user", cfg.Cores.User, "err", err)
+			runas.SetError(err.Error())
+		} else if cfg.Cores.User != "" {
+			log.Info("cores run as an unprivileged account", "user", cfg.Cores.User)
+		}
 	}
 	reg := core.NewRegistry()
 	conns := &connlog.Collector{}
@@ -247,11 +250,14 @@ func setup(args []string) (*env, error) {
 	if cfg.Cores.RegistryToken != "" {
 		inst.Headers = map[string]string{"Deploy-Token": cfg.Cores.RegistryToken}
 	}
-	manager, err := coreinstall.NewManager(inst, configuredCores(cfg))
-	if err != nil {
-		return nil, err
+	var manager *coreinstall.Manager
+	if cfg.NodeMode != spec.NodeMonitor {
+		manager, err = coreinstall.NewManager(inst, configuredCores(cfg))
+		if err != nil {
+			return nil, err
+		}
+		manager.Factory = managedFactory(cfg, log, sink)
 	}
-	manager.Factory = managedFactory(cfg, log, sink)
 	// binaryFor returns an explicit path as-is, otherwise the bosun-managed
 	// release, installing it on first use.
 	binaryFor := func(name, explicit, version string) (string, error) {
@@ -351,29 +357,31 @@ func setup(args []string) (*env, error) {
 		}
 		return manager.Factory("singbox-extended", bin, filepath.Join(cfg.DataDir, "singbox-extended"))
 	}
-	selected := manager.Selected()
-	for _, name := range manager.Order(cfg.CoreOrder()) {
-		if selected[name] != "" {
-			if configuredCores(cfg)[name].External {
-				return nil, fmt.Errorf("%s has both a managed selection and an explicit binary; remove one pin", name)
+	if cfg.NodeMode != spec.NodeMonitor {
+		selected := manager.Selected()
+		for _, name := range manager.Order(cfg.CoreOrder()) {
+			if selected[name] != "" {
+				if configuredCores(cfg)[name].External {
+					return nil, fmt.Errorf("%s has both a managed selection and an explicit binary; remove one pin", name)
+				}
+				binary, err := inst.Ensure(context.Background(), name, selected[name])
+				if err != nil {
+					return nil, err
+				}
+				c, err := manager.Factory(name, binary, filepath.Join(cfg.DataDir, "core-runtime", name, selected[name]))
+				if err != nil {
+					return nil, err
+				}
+				reg.Register(c)
+				continue
 			}
-			binary, err := inst.Ensure(context.Background(), name, selected[name])
+			c, err := build[name]()
 			if err != nil {
 				return nil, err
 			}
-			c, err := manager.Factory(name, binary, filepath.Join(cfg.DataDir, "core-runtime", name, selected[name]))
-			if err != nil {
-				return nil, err
+			if c != nil {
+				reg.Register(c)
 			}
-			reg.Register(c)
-			continue
-		}
-		c, err := build[name]()
-		if err != nil {
-			return nil, err
-		}
-		if c != nil {
-			reg.Register(c)
 		}
 	}
 	return &env{manager: manager, cfgPath: *cfgPath, cfg: cfg, log: log, logs: ring, driver: driver, reg: reg, inst: inst, conns: conns, audits: audits}, nil
@@ -445,6 +453,7 @@ func cmdRun(args []string) error {
 	if e.driver != nil && cfg.Web == nil {
 		ag := agent.New(cfg, e.driver, e.reg, mreg, log)
 		ag.CoreManager = e.manager
+		ag.ChangeMode = nodeModeHook(cfg)
 		ag.Version = version
 		ag.Upgrade = upgradeHook(log, upd)
 		ag.Remove = removalHook(e.cfgPath, cfg, e.driver)
@@ -631,6 +640,7 @@ func (s *supervisor) run(ctx context.Context) error {
 		}
 		ag := agent.New(s.cfg, d, s.reg, s.mreg, s.log)
 		ag.CoreManager = s.manager
+		ag.ChangeMode = nodeModeHook(s.cfg)
 		ag.Version = version
 		ag.Upgrade = s.upgrade
 		ag.Remove = removalHook(s.cfgPath, s.cfg, d)
@@ -788,6 +798,9 @@ func cmdCore(args []string) error {
 	rest = fs.Args()
 	dataDir := "/var/lib/bosun"
 	if cfg, err := config.Load(*cfgPath); err == nil {
+		if sub == "install" && cfg.NodeMode == spec.NodeMonitor {
+			return spec.ErrMonitorOnly
+		}
 		dataDir = cfg.DataDir
 	} else if !os.IsNotExist(err) {
 		return err

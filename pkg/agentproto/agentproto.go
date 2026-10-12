@@ -17,10 +17,11 @@ import (
 
 // PairRequest redeems a one-time pairing code for a node token.
 type PairRequest struct {
-	Code     string `json:"code"`
-	Hostname string `json:"hostname"`
-	Version  string `json:"version"`  // bosun version
-	Platform string `json:"platform"` // GOOS/GOARCH
+	NodeModes bool   `json:"node_modes,omitempty"`
+	Code      string `json:"code"`
+	Hostname  string `json:"hostname"`
+	Version   string `json:"version"`  // bosun version
+	Platform  string `json:"platform"` // GOOS/GOARCH
 }
 
 // PairResponse carries the permanent node token.
@@ -75,9 +76,12 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
-	Version  string             `json:"version"`
-	Revision string             `json:"revision"` // state revision currently applied
-	Traffic  []spec.UserTraffic `json:"traffic,omitempty"`
+	NodeModeRevision uint64             `json:"node_mode_revision,omitempty"`
+	NodeMode         spec.NodeMode      `json:"node_mode,omitempty"`
+	NodeModeError    string             `json:"node_mode_error,omitempty"`
+	Version          string             `json:"version"`
+	Revision         string             `json:"revision"` // state revision currently applied
+	Traffic          []spec.UserTraffic `json:"traffic,omitempty"`
 	// TrafficSeq identifies this delta batch. A batch that could not be
 	// acknowledged is re-sent unchanged under the same number, so the
 	// panel can apply it exactly once. 0 = an agent that does not number

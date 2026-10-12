@@ -69,9 +69,10 @@ type CertState struct {
 // Deps is everything Run looks at. Zero fields make the related check a
 // skip, so an agent-less CLI run can still use the package.
 type Deps struct {
-	Node  *spec.Node
-	Users []spec.User
-	Cores []CoreState
+	MonitorOnly bool
+	Node        *spec.Node
+	Users       []spec.User
+	Cores       []CoreState
 	// Skipped lists inbounds the agent left out of the last apply, by tag,
 	// with the reason (missing certificate, no core, waiting for users).
 	Skipped map[string]string
@@ -698,6 +699,9 @@ func checkShaper(_ context.Context, d *Deps) []Check {
 // checkIsolation reports whether the cores run as their own account and
 // whether the egress guard keeps them off private and metadata ranges.
 func checkIsolation(_ context.Context, d *Deps) []Check {
+	if d.MonitorOnly {
+		return []Check{{ID: "isolation", Name: "Core isolation", Status: Skip, Detail: "monitor-only mode; proxy cores are disabled"}}
+	}
 	c := Check{ID: "isolation", Name: "Core isolation (cores.user)"}
 	switch {
 	case d.CoreUserError != "":

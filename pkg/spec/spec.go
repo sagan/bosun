@@ -500,6 +500,8 @@ func (f Forward) BalanceMode() string {
 
 // Node is the complete desired state for this server.
 type Node struct {
+	ModeRevision    uint64           `json:"mode_revision,omitempty"`
+	Mode            NodeMode         `json:"mode,omitempty"`
 	EgressUpstreams []EgressUpstream `json:"egress_upstreams,omitempty"`
 	ReverseClients  []ReverseClient  `json:"reverse_clients,omitempty"`
 	ID              string           `json:"id,omitempty"`

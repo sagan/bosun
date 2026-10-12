@@ -5,6 +5,13 @@ driven either by its own built-in web panel (`panel.driver: local`, the
 default) or headless by a management panel (Captain, or Xboard's UniProxy
 API). Changes per release: [CHANGELOG.md](CHANGELOG.md).
 
+- **Monitor-only mode (bosun 0.66 / Captain 1.18):** Captain can install bosun with
+  `--monitor-only` and switch eligible idle nodes between monitoring and full
+  service. Monitor mode skips core downloads/startup and proxy system helpers,
+  rejects proxy state/core jobs, and keeps resources, traffic probes and updates.
+  Mode changes persist across restart/read-only Docker config mounts; existing
+  installations remain full nodes. Requires Captain v1.18.0 or newer.
+
 ## Status
 
 Verified end to end against the manifest's tested releases (sing-box

@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.66.0** (2026-10-11) — Add a persistent monitor-only runtime and installer option. Skip core downloads/startup and proxy network helpers, refuse proxy state and core/WARP jobs, and retain monitoring and self-update. Serialize mode transitions with core operations, checkpoint traffic and stop old services before restart; bind monotonic mode revisions to the panel identity and enforce a compatible updater floor.
+
 - **v0.65.0** (2026-10-10) — Add optional host-managed Docker web upgrades through a dedicated Unix socket, with fixed official image sources, stopped-data backups, persisted progress and verification of the running application's target version. Keep Docker daemon access outside the web process.
   - Add explicit installer `upgrade` and `enable-web-upgrade` commands, preserve deployment configuration during upgrades, and complete host-side uninstall of installer-managed binary/Compose deployments. Default uninstall removes application configuration/data/backups; `--keep-data` remains available. Preserve unrelated containers, shared volumes/networks and system packages; report incomplete cleanup instead of ignoring errors.
 

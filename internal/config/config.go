@@ -11,14 +11,18 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
 // Config is the on-disk configuration.
 type Config struct {
-	DataDir       string `yaml:"data_dir"`
-	LogLevel      string `yaml:"log_level"`
-	MetricsListen string `yaml:"metrics_listen"` // Prometheus endpoint; "" disables
+	NodeModeIdentity string        `yaml:"-"`
+	NodeModeRevision uint64        `yaml:"-"`
+	NodeMode         spec.NodeMode `yaml:"node_mode"`
+	DataDir          string        `yaml:"data_dir"`
+	LogLevel         string        `yaml:"log_level"`
+	MetricsListen    string        `yaml:"metrics_listen"` // Prometheus endpoint; "" disables
 
 	Cores struct {
 		// Order is the preference when several cores can serve an inbound.
@@ -230,7 +234,17 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
-	if c.Cores.SingboxExtended == nil && c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil && c.Cores.Snell == nil {
+	mode, err := readNodeMode(c.DataDir, c.NodeMode)
+	if err != nil {
+		return nil, fmt.Errorf("config: node_mode: %w", err)
+	}
+	c.NodeMode, c.NodeModeRevision, c.NodeModeIdentity = mode.Mode, mode.Revision, mode.Identity
+	if _, err := os.Lstat(filepath.Join(c.DataDir, "node-mode")); mode.Mode == spec.NodeMonitor || err == nil {
+		if c.MinVersion == "" || selfupdate.Newer(spec.NodeModeMinVersion, c.MinVersion) {
+			c.MinVersion = spec.NodeModeMinVersion
+		}
+	}
+	if c.NodeMode != spec.NodeMonitor && c.Cores.SingboxExtended == nil && c.Cores.Singbox == nil && c.Cores.Xray == nil && c.Cores.Mita == nil && c.Cores.Hysteria == nil && c.Cores.Snell == nil {
 		return nil, fmt.Errorf("config: at least one core must be enabled (cores.singbox, cores.xray, cores.mita, cores.hysteria, cores.snell)")
 	}
 	// BOSUN_CAPTAIN / BOSUN_PAIR (the docker one-liner Captain prints) select

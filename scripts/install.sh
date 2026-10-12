@@ -21,12 +21,13 @@ set -eu
 # has to come from a flag.
 have_tty() { ( exec 3>/dev/tty ) 2>/dev/null; }
 
-PRODUCT=bosun NATIVE=/usr/local/bin/bosun MODE="" WEB_UPGRADE=0
+PRODUCT=bosun NATIVE=/usr/local/bin/bosun MODE="" WEB_UPGRADE=0 NODE_MODE=full
 REPO="zeptop-dev/bosun"
 CAPTAIN="" PAIR="" VERSION="" WEB_LISTEN="" ACTION=install KEEP_DATA=0 YES=0 PANEL_USER="" PANEL_PASS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     install|upgrade|uninstall|enable-web-upgrade) ACTION="$1"; shift ;;
+    --monitor-only) NODE_MODE=monitor; shift ;;
     --web-upgrade) WEB_UPGRADE=1; shift ;;
     --mode) MODE="$2"; shift 2 ;;
     --keep-data) KEEP_DATA=1; shift ;;
@@ -138,6 +139,10 @@ if [ "$ACTION" = upgrade ] || [ "$ACTION" = enable-web-upgrade ]; then
   exit 0
 fi
 
+if [ "$NODE_MODE" = monitor ]; then
+  [ -n "$CAPTAIN" ] && [ -n "$PAIR" ] || { echo '--monitor-only requires --captain and --pair' >&2; exit 1; }
+  [ ! -f /etc/bosun/config.yaml ] || { echo 'Existing installation: change node mode from Captain instead.' >&2; exit 1; }
+fi
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 # Binary mode uses the host init system; Docker installation does not require it.
 MODE=${MODE:-binary}
@@ -170,7 +175,7 @@ if [ "$MODE" = binary ]; then install -m 0755 "$TMP/bosun" /usr/local/bin/bosun.
 # nft and tc back the per-user speed limits, nft forwards and strict
 # ingress; minimal images (Debian cloud, Alpine) ship without them. Best
 # effort: bosun runs without them and the doctor says what is missing.
-if [ "$MODE" = binary ] && { ! command -v nft >/dev/null || ! command -v tc >/dev/null; }; then
+if [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && { ! command -v nft >/dev/null || ! command -v tc >/dev/null; }; then
   echo "installing nftables and iproute2 (speed limits, nft forwards, strict ingress)"
   if command -v apt-get >/dev/null; then
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
@@ -193,6 +198,8 @@ ask_secret() {
 }
 random_port() { awk 'BEGIN{srand(); print 20000+int(rand()*40000)}'; }
 
+NODE_MODE_LINE=""
+[ "$NODE_MODE" != monitor ] || NODE_MODE_LINE="node_mode: monitor"
 FIRST_INSTALL=0
 [ -f /etc/bosun/config.yaml ] || FIRST_INSTALL=1
 if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
@@ -243,6 +250,7 @@ web:
   cat > /etc/bosun/config.yaml <<CFG
 data_dir: /var/lib/bosun
 log_level: info
+${NODE_MODE_LINE}
 metrics_listen: 127.0.0.1:9100
 
 cores:

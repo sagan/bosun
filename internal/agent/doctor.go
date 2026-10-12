@@ -60,7 +60,7 @@ func (a *Agent) Doctor(ctx context.Context) doctor.Report {
 		cp := *node
 		n = &cp
 	}
-	return doctor.Run(ctx, doctor.Deps{
+	return doctor.Run(ctx, doctor.Deps{MonitorOnly: a.MonitorOnly(),
 		Node: n, Users: users, Cores: cores, CoresKnown: true, Forwards: fwds, Certs: certs, Host: host,
 		Managed: managed, LastReport: lastReport, LastError: lastErr, PushInterval: a.driver.Intervals().Push, Started: a.started,
 		KomariEnabled: ks.Enabled, KomariError: ks.LastError, DStatus: dstatusPtr(a.dstatus.Status()), Assign: assign, Shaper: a.Status().Shaper,
@@ -89,7 +89,7 @@ func (a *Agent) runDoctor(ctx context.Context) {
 	// (tcpfit's qdisc unit, a hand-run tc script) deletes the root qdisc
 	// and bosun's speed-limit classes with it, and the desired limits have
 	// not changed, so nothing else would notice.
-	if a.Shaper != nil {
+	if a.Shaper != nil && !a.MonitorOnly() && !a.modeChanging.Load() {
 		if err := a.Shaper.Resync(ctx); err != nil {
 			a.log.Warn("speed limit shaper resync", "err", err)
 		}

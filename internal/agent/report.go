@@ -141,9 +141,12 @@ func (a *Agent) collectTagged(ctx context.Context, pending map[string]spec.Traff
 func (a *Agent) buildReport(traffic []spec.UserTraffic, host spec.SystemStatus) agentproto.Report {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	rep := agentproto.Report{CoreInventory: a.CoreInventory(), Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
+	rep := agentproto.Report{NodeMode: a.cfg.NodeMode.Effective(), NodeModeRevision: a.modeRevision(), CoreInventory: a.CoreInventory(), Traffic: traffic, Host: host, Cores: a.CoreStatus(), Online: map[string][]string{}}
 	a.statusMu.Lock()
 	rep.Doctor = a.pendingDoctor
+	if a.MonitorOnly() || (a.node != nil && ((a.node.Mode != "" && a.node.Mode != a.cfg.NodeMode.Effective()) || a.node.ModeRevision != a.modeRevision())) {
+		rep.NodeModeError = a.status.LastError
+	}
 	a.statusMu.Unlock()
 	for _, name := range a.reg.Names() {
 		c, _ := a.reg.Get(name)

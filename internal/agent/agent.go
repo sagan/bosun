@@ -45,6 +45,8 @@ import (
 const retryFloor = 30 * time.Second
 
 type Agent struct {
+	ChangeMode         func(spec.NodeMode, uint64, string) error
+	modeChanging       atomic.Bool
 	CoreManager        *coreinstall.Manager
 	coreChanges        chan coreChange
 	statsCollectionErr error
@@ -261,7 +263,7 @@ func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metr
 // Run blocks until ctx is cancelled, then stops every core.
 func (a *Agent) Run(ctx context.Context) error {
 	defer a.stopAll()
-	if a.EgressDisabled {
+	if a.EgressDisabled && !a.MonitorOnly() {
 		a.applyEgress(ctx, &spec.Node{})
 	}
 
@@ -509,7 +511,9 @@ func (a *Agent) pull(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("node: %w", err)
 	}
 	if nodeChanged {
-		a.resolveCerts(ctx, node)
+		if a.proxyModeReady(node) {
+			a.resolveCerts(ctx, node)
+		}
 		a.node = node
 		changed = true
 		a.log.Info("node config updated", "inbounds", len(node.Inbounds), "outbounds", len(node.Outbounds))

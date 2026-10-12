@@ -143,6 +143,9 @@ func withSkip(m map[string]string, tag, reason string) map[string]string {
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
+	if handled, err := a.applyNodeMode(ctx); handled {
+		return err
+	}
 	if err := a.checkpointTraffic(ctx); err != nil {
 		// A failed disk/stats read must not hold revoked private access open.
 		if a.privatePolicyActive || a.node.HasPrivateAccess() {
@@ -490,6 +493,15 @@ func listenPorts(ib spec.Inbound) []firewall.Port {
 // applyForwards reconciles relay rules: the panel's if it manages them,
 // otherwise the local config's.
 func (a *Agent) applyForwards(ctx context.Context) error {
+	if a.modeChanging.Load() {
+		return nil
+	}
+	if a.MonitorOnly() || (a.node != nil && a.node.Mode == spec.NodeMonitor) {
+		return spec.ValidateMonitorState(a.node, a.users, a.cfg.ForwardSpecs())
+	}
+	if !a.proxyModeReady(a.node) {
+		return errors.New("forwarding waits for the current node mode revision")
+	}
 	a.fwd.Realm = a.Realm
 	rules := a.cfg.ForwardSpecs()
 	if src, ok := a.driver.(panel.ForwardSource); ok {

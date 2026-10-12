@@ -27,6 +27,10 @@ func (a *Agent) runJobs(ctx context.Context) {
 		current[j.ID] = true
 	}
 	a.jobsMu.Lock()
+	if a.modeChanging.Load() {
+		a.jobsMu.Unlock()
+		return
+	}
 	// Forget finished jobs the panel already dropped so the set stays small.
 	for id := range a.jobsDone {
 		if !current[id] {
@@ -62,6 +66,10 @@ func (a *Agent) runJobs(ctx context.Context) {
 
 func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobResult {
 	out := agentproto.JobResult{ID: j.ID, Kind: j.Kind}
+	if (a.MonitorOnly() || a.modeChanging.Load()) && (j.Kind == spec.CoreManagementKind || j.Kind == "warp_register" || j.Kind == "reality_scan") {
+		out.Error = spec.ErrMonitorOnly.Error()
+		return out
+	}
 	switch j.Kind {
 	case spec.CoreManagementKind:
 		var p spec.CoreJobParams

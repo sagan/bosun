@@ -79,7 +79,7 @@ func TestStoreLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Node(ctx)
-	stateChanged, err := s.Report(ctx, agentproto.Report{Traffic: []spec.UserTraffic{{UserID: u2.ID, Up: 60, Down: 50}}, Online: map[string][]string{u2.UUID: {"1.2.3.4"}}})
+	stateChanged, err := s.Report(ctx, agentproto.Report{Traffic: []spec.UserTraffic{{UserID: u2.ID, Up: 60, Down: 50}}, Online: map[string][]string{u2.UUID: {"203.0.113.30"}}})
 	if err != nil || !stateChanged {
 		t.Fatalf("quota crossing should request a re-pull: %v %v", stateChanged, err)
 	}
@@ -96,7 +96,7 @@ func TestStoreLifecycle(t *testing.T) {
 			t.Fatalf("over-quota user must be dropped: %+v %+v", ib, users)
 		}
 	}
-	if s.Runtime().Online[u2.UUID][0] != "1.2.3.4" {
+	if s.Runtime().Online[u2.UUID][0] != "203.0.113.30" {
 		t.Fatal("online IPs should be kept")
 	}
 

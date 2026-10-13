@@ -18,7 +18,7 @@ source_dir=$(mktemp -d)
 trap 'rm -rf "$source_dir"' EXIT
 cp -R "$cached_source/." "$source_dir/"
 chmod -R u+w "$source_dir"
-go -C "$source_dir" get golang.org/x/net@v0.60.0
+go -C "$source_dir" get golang.org/x/net@v0.61.0
 for arch in amd64 arm64; do
   CGO_ENABLED=0 GOOS=linux GOARCH=$arch GOFLAGS=-mod=readonly \
     go build -C "$source_dir" -trimpath \

@@ -20,20 +20,20 @@ jobs:
     needs: extended-core
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with: { version: 9 }
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 24, cache: pnpm, cache-dependency-path: web/ui/pnpm-lock.yaml }
       - run: python3 scripts/i18n-check.py web/ui/src/i18n
       - run: cd web/ui && pnpm install --frozen-lockfile && pnpm exec oxlint src && pnpm build
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       # A tag must clear the same gates as master: a red commit may not ship.
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-      - run: go test -race ./...
+      - run: go test -race -timeout 20m ./...
       - name: WARP configuration against both real sing-box distributions
         run: BOSUN_TEST_DOWNLOAD_CORES=1 go test -race ./internal/core/singbox -run '^TestWARPRealConfigs$' -v -timeout 5m
       - name: Real Extended reload accounting and native aggregates
@@ -52,14 +52,17 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 -mode=binary bin/geocheck-linux-amd64
       # Nodes run on Alpine too, and a binary linked against the builder's
       # glibc does not start on musl at all ("no such file or directory").
-      - name: binaries are static
+      - name: binaries are static and built with the pinned Go
         run: |
+          want="go$(sed -n 's/^toolchain go//p' go.mod)"
           for f in bin/bosun-linux-* bin/geocheck-linux-*; do
             file "$f"
             file "$f" | grep -q 'statically linked' || { echo "$f is dynamically linked"; exit 1; }
+            go version "$f"
+            go version "$f" | grep -q " $want " || { echo "$f was not built with $want"; exit 1; }
           done
       - run: cd bin && sha256sum bosun-linux-* geocheck-linux-* geocheck-LICENSE.txt > SHA256SUMS && cat SHA256SUMS
-      - uses: softprops/action-gh-release@v3
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         if: github.event_name == 'push'
         with:
           name: bosun ${{ github.ref_name }}
@@ -75,16 +78,16 @@ jobs:
     needs: binaries
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name == 'push'
         with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: docker/login-action@v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: github.event_name == 'push'
         with: { username: zeptop, password: "${{ secrets.DOCKERHUB_TOKEN }}" }
-      - uses: docker/build-push-action@v7
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64

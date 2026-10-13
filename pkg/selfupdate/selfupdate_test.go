@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -158,5 +159,22 @@ func TestFreeSpaceAndFloor(t *testing.T) {
 	c.MinVersion = "v0.1.0"
 	if ver, err := c.Rollback(); err != nil || ver != "v0.1.0" {
 		t.Fatalf("rollback at the floor: %v %v", ver, err)
+	}
+}
+
+func TestValidTag(t *testing.T) {
+	for _, ok := range []string{"v0.66.0", "v1.19.0", "v1.2.3-rc.1", "v10.0.0"} {
+		if !ValidTag(ok) {
+			t.Errorf("%q should be a valid tag", ok)
+		}
+	}
+	for _, bad := range []string{"", "0.66.0", "v0.66", "v01.2.3", "v0.66.0/../../x", "v0.66.0?x=1", "v0.66.0;a", "v0.66.0 ", "latest"} {
+		if ValidTag(bad) {
+			t.Errorf("%q should be rejected", bad)
+		}
+	}
+	c := &Client{Repo: "example/example", Binary: "x", Version: "v0.1.0"}
+	if _, err := c.Apply(context.Background(), "v0.1.0/../../evil"); err == nil || !strings.Contains(err.Error(), "release tag") {
+		t.Fatalf("malformed tag reached the API client: %v", err)
 	}
 }

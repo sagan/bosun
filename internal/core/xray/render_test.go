@@ -107,7 +107,7 @@ func TestRenderOutboundsAndRoutes(t *testing.T) {
 		AllowPrivateDest: true, // this fixture indexes the rule list
 		Inbounds:         []spec.Inbound{{Tag: "in", Protocol: spec.VMess, Port: 1}},
 		Outbounds: []spec.Outbound{{Tag: "landing", Protocol: "socks", ProxyTag: "warp",
-			Settings: map[string]any{"servers": []any{map[string]any{"address": "1.2.3.4", "port": 1080}}, "streamSettings": map[string]any{"network": "tcp"}}}},
+			Settings: map[string]any{"servers": []any{map[string]any{"address": "203.0.113.30", "port": 1080}}, "streamSettings": map[string]any{"network": "tcp"}}}},
 		Routes: []spec.RouteRule{{Match: []string{"protocol:bittorrent"}, Action: "block"}, {Match: []string{"domain:netflix.com", "ip:1.1.1.1/32"}, Action: "outbound", Value: "landing"}},
 	}
 	b, _, err := render(node, node.Inbounds, users, renderOptions{})
@@ -231,12 +231,12 @@ func TestDecodeIPMap(t *testing.T) {
 	var resp []byte
 	resp = protowire.AppendTag(resp, 1, protowire.BytesType)
 	resp = protowire.AppendString(resp, "user>>>u1>>>online")
-	for _, e := range [][]byte{entry("1.2.3.4", 1), entry("5.6.7.8", 2)} {
+	for _, e := range [][]byte{entry("203.0.113.30", 1), entry("198.51.100.20", 2)} {
 		resp = protowire.AppendTag(resp, 2, protowire.BytesType)
 		resp = protowire.AppendBytes(resp, e)
 	}
 	ips, err := decodeIPMap(resp)
-	if err != nil || len(ips) != 2 || ips[0] != "1.2.3.4" || ips[1] != "5.6.7.8" {
+	if err != nil || len(ips) != 2 || ips[0] != "203.0.113.30" || ips[1] != "198.51.100.20" {
 		t.Fatalf("ips=%v err=%v", ips, err)
 	}
 }

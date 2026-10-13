@@ -9,10 +9,6 @@ import (
 )
 
 func (s *Server) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
-	if err := http.NewCrossOriginProtection().Check(r); err != nil {
-		fail(w, 403, err)
-		return
-	}
 	var in spec.DiagnosticRequest
 	if err := decode(r, &in); err != nil {
 		fail(w, 400, err)

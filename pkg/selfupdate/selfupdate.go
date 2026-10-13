@@ -266,6 +266,8 @@ func (c *Client) Apply(ctx context.Context, version string) (applied string, err
 	var rel *release
 	if version == "" {
 		rel, err = c.latest(ctx)
+	} else if !ValidTag(version) {
+		return "", fmt.Errorf("%q is not a release tag like v1.2.3", version)
 	} else {
 		rel, err = c.byTag(ctx, version)
 	}

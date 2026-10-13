@@ -4,18 +4,18 @@ import "testing"
 
 func TestRegionOf(t *testing.T) {
 	cases := map[[2]string]string{
-		{"Tokyo IPLC 01", ""}:            "JP",
-		{"香港 BGP", ""}:                   "HK",
-		{"HK-IEPL-02", ""}:               "HK",
-		{"Hong Kong 01", ""}:             "HK",
-		{"US Los Angeles", ""}:           "US",
-		{"新加坡 01", ""}:                   "SG",
-		{"Premium 01", "jp1.zeptop.dev"}: "JP",
-		{"Premium 01", "1.2.3.4"}:        "",
-		{"美", ""}:                        "US",
-		{"Frankfurt", ""}:                "DE",
-		{"random", ""}:                   "",
-		{"HKG-1", ""}:                    "", // hkg is not a keyword
+		{"Tokyo IPLC 01", ""}:             "JP",
+		{"香港 BGP", ""}:                    "HK",
+		{"HK-IEPL-02", ""}:                "HK",
+		{"Hong Kong 01", ""}:              "HK",
+		{"US Los Angeles", ""}:            "US",
+		{"新加坡 01", ""}:                    "SG",
+		{"Premium 01", "jp1.example.com"}: "JP",
+		{"Premium 01", "203.0.113.30"}:    "",
+		{"美", ""}:                         "US",
+		{"Frankfurt", ""}:                 "DE",
+		{"random", ""}:                    "",
+		{"HKG-1", ""}:                     "", // hkg is not a keyword
 	}
 	for in, want := range cases {
 		if got := RegionOf(in[0], in[1]); got != want {

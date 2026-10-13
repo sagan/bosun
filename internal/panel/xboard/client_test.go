@@ -17,7 +17,7 @@ const configJSON = `{
   "tls":2,"flow":"xtls-rprx-vision",
   "tls_settings":{"server_name":"www.apple.com","server_port":"443","public_key":"pub","private_key":"priv","short_id":"0123","allow_insecure":false},
   "multiplex":{"enabled":false},
-  "custom_outbounds":[{"tag":"landing","protocol":"socks","settings":{"server":"1.2.3.4","server_port":1080},"proxy_tag":""}],
+  "custom_outbounds":[{"tag":"landing","protocol":"socks","settings":{"server":"203.0.113.30","server_port":1080},"proxy_tag":""}],
   "base_config":{"push_interval":30,"pull_interval":45}
 }`
 

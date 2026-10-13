@@ -109,7 +109,7 @@ func TestRenderOutboundChainAndRoutes(t *testing.T) {
 		Inbounds:         []spec.Inbound{{Tag: "in", Protocol: spec.Trojan, Port: 443, TLS: &spec.TLS{Mode: spec.TLSStandard, ServerName: "a", CertPath: "/c", KeyPath: "/k"}}},
 		Outbounds: []spec.Outbound{
 			{Tag: "warp", Protocol: "wireguard", Settings: map[string]any{"private_key": "x"}},
-			{Tag: "landing", Protocol: "socks", Settings: map[string]any{"server": "1.2.3.4", "server_port": 1080}, ProxyTag: "warp"},
+			{Tag: "landing", Protocol: "socks", Settings: map[string]any{"server": "203.0.113.30", "server_port": 1080}, ProxyTag: "warp"},
 		},
 		Routes: []spec.RouteRule{
 			{Match: []string{"protocol:bittorrent"}, Action: "block"},

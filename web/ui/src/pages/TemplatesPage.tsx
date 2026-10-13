@@ -1,6 +1,6 @@
 import { Badge, Button, Card, Code, Group, SegmentedControl, Select, Stack, Text, Textarea } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '../lib/api'
 import { toast } from '../lib/notify'
@@ -21,12 +21,16 @@ export default function SubTemplatesPage() {
   const q = useQuery({ queryKey: ['sub-templates'], queryFn: () => api.get<Data>('/api/sub-templates') })
   const [mode, setMode] = useState('design')
   const [format, setFormat] = useState('clash')
-  const [body, setBody] = useState('')
   const custom = q.data?.templates[format] ?? ''
   const fallback = q.data?.defaults[format] ?? ''
-  useEffect(() => { setBody(custom || fallback) }, [format, custom, fallback])
+  // The editor shows the saved template (or the default) until the operator
+  // types; switching format or receiving a fresh load discards the draft.
+  const [draft, setDraft] = useState<{ key: string; text: string } | null>(null)
+  const bodyKey = `${format}\u0000${custom}\u0000${fallback}`
+  const body = draft?.key === bodyKey ? draft.text : custom || fallback
+  const setBody = (text: string) => setDraft({ key: bodyKey, text })
   const save = useMutation({
-    mutationFn: (text: string) => api.put('/api/sub-templates', { templates: { ...(q.data?.templates ?? {}), [format]: text === fallback ? '' : text } }),
+    mutationFn: (text: string) => api.put('/api/sub-templates', { templates: { ...q.data?.templates, [format]: text === fallback ? '' : text } }),
     onSuccess: () => { toast.ok(t('common.saved')); qc.invalidateQueries({ queryKey: ['sub-templates'] }) }, onError: toast.err,
   })
   const names = Object.keys(q.data?.defaults ?? {})

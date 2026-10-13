@@ -87,7 +87,7 @@ func TestAuthServer(t *testing.T) {
 	a.setUsers(map[string]spec.User{"pw-1": users[0]})
 
 	post := func(auth string) map[string]any {
-		body, _ := json.Marshal(map[string]any{"addr": "1.2.3.4:5", "auth": auth, "tx": 0})
+		body, _ := json.Marshal(map[string]any{"addr": "203.0.113.30:5", "auth": auth, "tx": 0})
 		resp, err := http.Post("http://"+addr+"/auth", "application/json", bytes.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
@@ -103,7 +103,7 @@ func TestAuthServer(t *testing.T) {
 	if r := post("wrong"); r["ok"] != false {
 		t.Fatalf("invalid auth: %v", r)
 	}
-	if on := a.online(); len(on["u1"]) != 1 || on["u1"][0] != "1.2.3.4" {
+	if on := a.online(); len(on["u1"]) != 1 || on["u1"][0] != "203.0.113.30" {
 		t.Fatalf("online after auth: %v", on)
 	}
 	a.setUsers(map[string]spec.User{})

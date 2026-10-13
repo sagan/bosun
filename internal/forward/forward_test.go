@@ -148,7 +148,7 @@ func TestApplyDiffAndValidate(t *testing.T) {
 		t.Fatal("b should be closed")
 	}
 	// Validation.
-	bad := []spec.Forward{{Tag: "x", Port: 1, Protocol: "sctp", Target: "1.2.3.4:5"}}
+	bad := []spec.Forward{{Tag: "x", Port: 1, Protocol: "sctp", Target: "203.0.113.30:5"}}
 	if err := m.Apply(bad); err == nil {
 		t.Fatal("bad protocol accepted")
 	}

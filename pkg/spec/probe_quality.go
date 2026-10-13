@@ -80,7 +80,7 @@ func (m ProbeMeasurement) Valid() bool {
 // Validate is shared by both panels and the runner. Targets are admin-chosen;
 // private addresses are allowed for explicitly configured line/service checks.
 func (t PingTask) Validate() error {
-	if len(t.Name) > 128 || len(t.Target) > 2048 || !Plain(t.Name) || !Plain(t.Target) || strings.ContainsAny(t.Target, " \t\"'") || t.Target == "" {
+	if len(t.Name) > 128 || len(t.Target) > 2048 || !PublicLabel(t.Name) || !Plain(t.Target) || strings.ContainsAny(t.Target, " \t\"'") || t.Target == "" {
 		return fmt.Errorf("invalid probe name or target")
 	}
 	if t.SourceIP != "" && net.ParseIP(t.SourceIP) == nil {

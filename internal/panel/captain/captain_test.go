@@ -67,7 +67,7 @@ func TestPairFetchReport(t *testing.T) {
 		Revision: "r1", PullSeconds: 7, PushSeconds: 9,
 		Node:     spec.Node{ID: "1", Inbounds: []spec.Inbound{{Tag: "a", Protocol: spec.Mieru, Port: 1, ScopedUsers: true, Users: []spec.User{{ID: 2, Name: "u2"}}}}},
 		Users:    []spec.User{{ID: 1, Name: "u1"}},
-		Forwards: []spec.Forward{{Tag: "f", Port: 5, Protocol: "tcp", Target: "1.2.3.4:5"}},
+		Forwards: []spec.Forward{{Tag: "f", Port: 5, Protocol: "tcp", Target: "203.0.113.30:5"}},
 	}}
 	srv := httptest.NewServer(f.handler())
 	defer srv.Close()

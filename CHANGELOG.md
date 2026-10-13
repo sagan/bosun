@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.67.0** (2026-10-13) — Add `spec.PublicLabel` (no control or markup characters) and apply it to probe task names, so a label the public status page renders cannot become HTML; add `selfupdate.ValidTag` and refuse a malformed release tag before it is spliced into a GitHub API path (panels and the standalone updater share it). Standalone panel: every cookie-authenticated write and the login now reject cross-origin requests by Fetch metadata, not only the network diagnostic. CI/release: `go test` gets a 20 minute timeout, release binaries are checked for the Go toolchain pinned in go.mod, third-party actions are pinned by commit. Tests use documentation addresses only; golang.org/x/net v0.61.0 and x/crypto v0.58.0 (geocheck build included).
+
 - **v0.66.0** (2026-10-11) — Add a persistent monitor-only runtime and installer option. Skip core downloads/startup and proxy network helpers, refuse proxy state and core/WARP jobs, and retain monitoring and self-update. Serialize mode transitions with core operations, checkpoint traffic and stop old services before restart; bind monotonic mode revisions to the panel identity and enforce a compatible updater floor.
 
 - **v0.65.0** (2026-10-10) — Add optional host-managed Docker web upgrades through a dedicated Unix socket, with fixed official image sources, stopped-data backups, persisted progress and verification of the running application's target version. Keep Docker daemon access outside the web process.

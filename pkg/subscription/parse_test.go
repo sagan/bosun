@@ -35,8 +35,8 @@ func TestParseRoundTrip(t *testing.T) {
 
 func TestParseForeignForms(t *testing.T) {
 	// Legacy fully-base64 ss link and a plain-userinfo SIP002 link.
-	ss1, err := ParseURI("ss://" + base64.StdEncoding.EncodeToString([]byte("aes-256-gcm:secret@1.2.3.4:8388")) + "#legacy")
-	if err != nil || ss1.Inbound.Cipher != "aes-256-gcm" || ss1.Password != "secret" || ss1.Host != "1.2.3.4" || ss1.Name != "legacy" {
+	ss1, err := ParseURI("ss://" + base64.StdEncoding.EncodeToString([]byte("aes-256-gcm:secret@203.0.113.30:8388")) + "#legacy")
+	if err != nil || ss1.Inbound.Cipher != "aes-256-gcm" || ss1.Password != "secret" || ss1.Host != "203.0.113.30" || ss1.Name != "legacy" {
 		t.Fatalf("legacy ss: %+v %v", ss1, err)
 	}
 	ss2, err := ParseURI("ss://chacha20-ietf-poly1305:p%40ss@host.test:443?plugin=obfs#plain")

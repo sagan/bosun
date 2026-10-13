@@ -327,6 +327,12 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 			fail(w, http.StatusUnauthorized, errors.New("not signed in"))
 			return
 		}
+		// A cookie session is ambient: refuse writes a foreign page made
+		// the browser send (Sec-Fetch-Site / Origin against the Host).
+		if err := crossOrigin.Check(r); err != nil {
+			fail(w, http.StatusForbidden, err)
+			return
+		}
 		if !s.sessions.Valid(c.Value) {
 			fail(w, http.StatusUnauthorized, errors.New("session expired"))
 			return
@@ -334,6 +340,10 @@ func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
+
+// crossOrigin is Go's Fetch-metadata based CSRF guard; safe methods pass,
+// and a bearer token never reaches it (tokens are not ambient).
+var crossOrigin = http.NewCrossOriginProtection()
 
 // local rejects mutations while a panel owns the node.
 func (s *Server) local(next http.HandlerFunc) http.HandlerFunc {
@@ -349,6 +359,10 @@ func (s *Server) local(next http.HandlerFunc) http.HandlerFunc {
 // ---- auth ------------------------------------------------------------------
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	if err := crossOrigin.Check(r); err != nil {
+		fail(w, http.StatusForbidden, err)
+		return
+	}
 	var in struct{ Username, Password, Code string }
 	if err := decode(r, &in); err != nil {
 		fail(w, http.StatusBadRequest, err)

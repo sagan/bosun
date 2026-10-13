@@ -8,19 +8,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with: { version: 9 }
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: 24, cache: pnpm, cache-dependency-path: web/ui/pnpm-lock.yaml }
       - run: python3 scripts/i18n-check.py web/ui/src/i18n
       - run: cd web/ui && pnpm install --frozen-lockfile && pnpm exec oxlint src && pnpm build
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with: { go-version-file: go.mod }
       - run: git ls-files '*.go' | xargs gofmt -l | tee /dev/stderr | test -z "$(cat)"
       - run: go vet ./...
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
-      - run: go test -race -coverpkg=./... -coverprofile=coverage.out ./...
+      - run: go test -race -timeout 20m -coverpkg=./... -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -1
       - name: WARP configuration against both real sing-box distributions
         run: BOSUN_TEST_DOWNLOAD_CORES=1 go test -race ./internal/core/singbox -run '^TestWARPRealConfigs$' -v -timeout 5m

@@ -246,6 +246,11 @@ func TestLinuxTransport(t *testing.T) {
 		return shared.Reconcile(context.Background(), sharedDevices, limits, func(context.Context) error { quiesces++; return nil })
 	}
 	if err := applyLimits([]shaper.Limit{{UserID: 1, Mbps: 2}}); err != nil {
+		for _, dev := range sharedDevices {
+			for _, direction := range []string{"ingress", "egress"} {
+				t.Logf("tc filters %s %s: %s", dev, direction, run(0, "", "tc", "-j", "filter", "show", "dev", dev, direction))
+			}
+		}
 		t.Fatalf("shared shaper: %v", err)
 	}
 	if err := applyLimits([]shaper.Limit{{UserID: 1, Mbps: 2}}); err != nil {

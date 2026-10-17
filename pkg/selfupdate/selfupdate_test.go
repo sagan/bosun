@@ -178,3 +178,31 @@ func TestValidTag(t *testing.T) {
 		t.Fatalf("malformed tag reached the API client: %v", err)
 	}
 }
+
+func TestRollbackFloorRejectsUnknownBackupVersion(t *testing.T) {
+	for _, metadata := range []string{"", "garbage", "v0.67.1"} {
+		dir := t.TempDir()
+		exe := filepath.Join(dir, "bosun")
+		if err := os.WriteFile(exe, []byte("new"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(exe+".backup", []byte("old"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if metadata != "" {
+			if err := os.WriteFile(exe+".backup.version", []byte(metadata), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		c := &Client{Binary: "bosun", Version: "v0.68.0", Exe: exe, MinVersion: "v0.68.0"}
+		if _, err := c.Rollback(); err == nil {
+			t.Fatal("unsafe rollback accepted")
+		}
+		for path, want := range map[string]string{exe: "new", exe + ".backup": "old"} {
+			got, err := os.ReadFile(path)
+			if err != nil || string(got) != want {
+				t.Fatal("rejected rollback mutated files", err)
+			}
+		}
+	}
+}

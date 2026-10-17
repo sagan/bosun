@@ -62,6 +62,11 @@ import (
 // newUpdater returns the self-update client for this binary. minVersion
 // (config min_version) is the floor no update or rollback may go below.
 func newUpdater(minVersion string) *selfupdate.Client {
+	// An older binary ignores managed WG routing fields and could serve a
+	// cached subscriber inbound directly. Keep this floor even after restart.
+	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.68.0", minVersion) {
+		minVersion = "v0.68.0"
+	}
 	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }
 

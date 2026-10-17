@@ -376,7 +376,10 @@ func (c *Client) Rollback() (string, error) {
 	if b, err := os.ReadFile(exe + ".backup.version"); err == nil {
 		ver = strings.TrimSpace(string(b))
 	}
-	if c.MinVersion != "" && ver != "previous" && Newer(c.MinVersion, ver) {
+	if c.MinVersion != "" && !ValidTag(ver) {
+		return "", errors.New("cannot verify previous version against the minimum allowed version")
+	}
+	if c.MinVersion != "" && Newer(c.MinVersion, ver) {
 		return "", fmt.Errorf("previous version %s is below the minimum allowed version %s", ver, c.MinVersion)
 	}
 	// Keep the current one as the new backup so rollback is reversible.

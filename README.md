@@ -969,6 +969,8 @@ and explicitly granted private CIDR/protocol/port access with SNAT. Shared tc
 classes enforce each user's limit across ordinary egress and all WG links on A.
 No tunnel failure falls back to A's direct exit. Both nodes require Linux,
 `wg`, `ip`, `nft`, `tc`, root network privileges and non-root protected cores.
+The built-in updater/rollback cannot go below v0.68.0, because older binaries
+ignore managed WG routing fields. Unknown backup versions are refused.
 The feature requires fresh capabilities on both peers and Xray on A; it is not
 an independently editable standalone WireGuard client. See the
 [connection guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#managed-reverse-wireguard-captain-120--bosun-068).

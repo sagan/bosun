@@ -154,7 +154,7 @@ func TestSharedLegacyFWJSONRetainsEnforcement(t *testing.T) {
 		{"0x100000000", "ifb-bosun", false}, {"0x10001/0x100000000", "ifb-bosun", false},
 		{"0x10001 classid 1:2", "ifb-bosun", false},
 	} {
-		raw := `[{"protocol":"all","pref":49151,"kind":"fw","chain":0,"options":{handle ` + tc.handle + ` 
+		raw := `[{"protocol":"all","pref":49151,"kind":"fw","chain":0,"options":{handle ` + tc.handle + `
   "actions":[{"kind":"mirred","direction":"egress","mirred_action":"redirect","to_dev":"` + tc.target + `"}]}}]`
 		s := &Shared{Legacy: &Shaper{Run: func(context.Context, string, ...string) ([]byte, error) { return []byte(raw), nil }}}
 		err := s.checkFilters(context.Background(), "eth0", "ingress", true, map[string]sharedLink{ifbDev: {}})

@@ -239,7 +239,11 @@ func TestLinuxTransport(t *testing.T) {
 
 	// Even a broad LAN grant must not expose B's own management services.
 	probe(a.Address(false, false), "10.20.0.1", false)
-	shared := &shaper.Shared{Dir: t.TempDir(), Legacy: &shaper.Shaper{Interface: "uplink0"}}
+	legacy := &shaper.Shaper{Interface: "uplink0"}
+	if err := legacy.Apply(context.Background(), []shaper.Limit{{UserID: 1, Mbps: 2}}); err != nil {
+		t.Fatalf("existing ordinary shaping: %v", err)
+	}
+	shared := &shaper.Shared{Dir: t.TempDir(), Legacy: legacy}
 	sharedDevices := []string{"uplink0", "uplink1", a.Interface(), a2.Interface()}
 	quiesces := 0
 	applyLimits := func(limits []shaper.Limit) error {

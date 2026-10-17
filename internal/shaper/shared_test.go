@@ -173,3 +173,15 @@ func TestSharedLegacyFWJSONRetainsEnforcement(t *testing.T) {
 		t.Fatal("rewrote quoted text")
 	}
 }
+
+func TestSharedRecognizesCompleteLegacyIngressInventory(t *testing.T) {
+	raw := `[{"protocol":"all","pref":1,"kind":"matchall","chain":0},{"protocol":"all","pref":1,"kind":"matchall","chain":0,"options":{"handle":1,"actions":[{"kind":"connmark"},{"kind":"mirred","direction":"egress","mirred_action":"redirect","to_dev":"ifb-bosun"}]}}]`
+	s := &Shared{Legacy: &Shaper{Run: func(context.Context, string, ...string) ([]byte, error) { return []byte(raw), nil }}}
+	if err := s.checkFilters(context.Background(), "eth0", "ingress", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	raw = `[{"protocol":"all","pref":1,"kind":"matchall","chain":0}]`
+	if err := s.checkFilters(context.Background(), "eth0", "ingress", false, nil); err == nil {
+		t.Fatal("unproven legacy header accepted")
+	}
+}

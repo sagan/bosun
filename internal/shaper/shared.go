@@ -341,15 +341,22 @@ func (s *Shared) checkFilters(ctx context.Context, dev, direction string, owned 
 	if err != nil {
 		return err
 	}
-	for _, f := range list {
-		// The legacy shaper's single ingress mirror is removed by Legacy.Apply.
-		legacy := false
-		if direction == "ingress" && f.Pref == 1 && f.Kind == "matchall" && f.Protocol == "all" && f.Chain == 0 && f.Options != nil {
-			for _, a := range f.Options.Actions {
-				legacy = legacy || (a.Kind == "mirred" && a.To == ifbDev && a.Direction == "egress" && a.Action == "redirect")
-			}
+	isLegacy := func(f sharedFilter) bool {
+		if direction != "ingress" || f.Pref != 1 || f.Kind != "matchall" || f.Protocol != "all" || f.Chain != 0 || f.Options == nil || len(f.Options.Actions) != 2 {
+			return false
 		}
-		if legacy {
+		first, redirect := f.Options.Actions[0], f.Options.Actions[1]
+		return first.Kind == "connmark" && redirect.Kind == "mirred" && redirect.To == ifbDev && redirect.Direction == "egress" && redirect.Action == "redirect"
+	}
+	legacyPresent := false
+	for _, f := range list {
+		legacyPresent = legacyPresent || isLegacy(f)
+	}
+	for _, f := range list {
+		// tc emits a summary before the detailed matchall filter. Recognize
+		// it only alongside the complete legacy connmark+redirect action list.
+		legacyHeader := legacyPresent && f.Pref == 1 && f.Kind == "matchall" && f.Protocol == "all" && f.Chain == 0 && f.Options == nil
+		if isLegacy(f) || legacyHeader {
 			continue
 		}
 		if !owned || f.Protocol != "all" || f.Chain != 0 || (f.Pref != 49150 && f.Pref != 49151) {

@@ -275,9 +275,6 @@ func (s *Server) getKomari(w http.ResponseWriter, r *http.Request) {
 	hasKey := k.Key != ""
 	k.Key = ""
 	var st any
-	if a := s.currentAgent(); a != nil {
-		st = a.KomariStatus()
-	}
 	ok(w, map[string]any{"settings": k, "has_key": hasKey, "status": st})
 }
 
@@ -297,9 +294,6 @@ func (s *Server) getDStatus(w http.ResponseWriter, r *http.Request) {
 	hasKey := d.Key != ""
 	d.Key = ""
 	var st any
-	if a := s.currentAgent(); a != nil {
-		st = a.DStatusStatus()
-	}
 	ok(w, map[string]any{"settings": d, "has_key": hasKey, "status": st})
 }
 

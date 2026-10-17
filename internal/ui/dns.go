@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/dns"
-	"github.com/zeptop-dev/bosun/internal/komari"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
@@ -38,7 +37,7 @@ func (s *Server) dnsSync(ctx context.Context, names ...string) []dns.Result {
 			ip6 = ip.String()
 		}
 	} else {
-		ip4, ip6 = komari.DetectPublicIPs(ctx)
+		ip4, ip6 = dns.DetectPublicIPs(ctx)
 	}
 	if ip4 == "" && ip6 == "" {
 		return []dns.Result{{Name: todo[0], Action: "skipped", Error: "cannot determine this node's public address"}}

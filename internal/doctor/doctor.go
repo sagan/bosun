@@ -16,7 +16,6 @@ import (
 
 	"github.com/zeptop-dev/bosun/internal/egressguard"
 
-	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"github.com/zeptop-dev/bosun/internal/firewall"
 	"github.com/zeptop-dev/bosun/internal/ingressguard"
 	"github.com/zeptop-dev/bosun/internal/shaper"
@@ -90,15 +89,10 @@ type Deps struct {
 	Started      time.Time
 	LastError    string
 	PushInterval time.Duration
-	// Komari exporter state.
-	KomariEnabled bool
-	KomariError   string
 	// Assign maps inbound tag to the core serving it (for core-specific advice).
 	Assign map[string]string
 	// Shaper is the speed-limit state (nil = no limits configured).
 	Shaper *shaper.Status
-	// DStatus is the neko-status endpoint's state, nil when never set up.
-	DStatus *dstatus.Status
 	// RealmRunning is whether the realm relay process is up (rules with
 	// the realm backend depend on it).
 	RealmRunning bool
@@ -140,7 +134,7 @@ func Run(ctx context.Context, d Deps) Report {
 	rep := Report{At: now(), Checks: []Check{}}
 	checks := []func(context.Context, *Deps) []Check{
 		checkCores, checkInbounds, checkBind, checkForwards, checkCerts, checkPorts,
-		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkKomari, checkDStatus, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation, checkRules,
+		checkFirewall, checkDisk, checkMemory, checkPanel, checkPublic, checkTime, checkReality, checkShaper, checkGuard, checkAutoOpen, checkIsolation, checkRules,
 	}
 	for _, fn := range checks {
 		cctx, cancel := context.WithTimeout(ctx, perCheck)
@@ -575,75 +569,6 @@ func checkPanel(_ context.Context, d *Deps) []Check {
 
 func checkPublic(_ context.Context, _ *Deps) []Check {
 	return []Check{{ID: "public", Name: "Public reachability", Status: Skip, Detail: "needs an external vantage point (panel speed test)"}}
-}
-
-func checkKomari(_ context.Context, d *Deps) []Check {
-	c := Check{ID: "komari", Name: "Komari reporting"}
-	switch {
-	case !d.KomariEnabled:
-		c.Status, c.Detail = Skip, "off"
-	case d.KomariError != "":
-		c.Status, c.Detail = Warn, d.KomariError
-	default:
-		c.Status = OK
-	}
-	return []Check{c}
-}
-
-// checkDStatus reports on the neko-status endpoint a DStatus panel
-// scrapes. It is a listener, so "configured but never read" is worth
-// saying: that is usually a firewall or a wrong address in the panel.
-func checkDStatus(_ context.Context, d *Deps) []Check {
-	c := Check{ID: "dstatus", Name: "DStatus"}
-	now := time.Now
-	if d.Now != nil {
-		now = d.Now
-	}
-	st := d.DStatus
-	switch {
-	case st == nil || !st.Enabled:
-		c.Status, c.Detail = Skip, "off"
-	case st.LastError != "" && (st.Mode != "active" || st.Reports == 0):
-		c.Status, c.Detail = Fail, st.LastError
-	case st.Mode == "active":
-		// Reporting: the panel's acceptance is the only thing that says it
-		// works, and a report that stops being accepted is worth a warning
-		// with the panel's own reason.
-		stale := time.Duration(max(st.Interval, 1)) * time.Second * 3
-		if stale < 30*time.Second {
-			stale = 30 * time.Second
-		}
-		switch {
-		case st.LastReport.IsZero():
-			c.Status, c.Detail = Warn, "reporting to "+st.Server+", no report accepted yet"+errNote(st.LastError)
-		case now().Sub(st.LastReport) > stale:
-			c.Status, c.Detail = Warn, "reporting to "+st.Server+", last accepted "+now().Sub(st.LastReport).Truncate(time.Second).String()+" ago"+errNote(st.LastError)
-		default:
-			c.Status, c.Detail = OK, "reporting to "+st.Server+", last accepted "+now().Sub(st.LastReport).Truncate(time.Second).String()+" ago"
-		}
-	case st.LastScrape.IsZero():
-		c.Status, c.Detail = Warn, "listening on "+st.Listen+", never scraped yet"+deniedNote(st.Denied)
-	case now().Sub(st.LastScrape) > 10*time.Minute:
-		c.Status, c.Detail = Warn, "last scraped "+now().Sub(st.LastScrape).Truncate(time.Second).String()+" ago"+deniedNote(st.Denied)
-	default:
-		c.Status, c.Detail = OK, "listening on "+st.Listen+", last scraped "+now().Sub(st.LastScrape).Truncate(time.Second).String()+" ago"
-	}
-	return []Check{c}
-}
-
-func errNote(e string) string {
-	if e == "" {
-		return ""
-	}
-	return "; " + e
-}
-
-// deniedNote names the likeliest cause when scrapes are being turned away.
-func deniedNote(n int) string {
-	if n == 0 {
-		return ""
-	}
-	return "; " + strconv.Itoa(n) + " scrape(s) refused for a wrong key"
 }
 
 func checkTime(ctx context.Context, d *Deps) []Check {

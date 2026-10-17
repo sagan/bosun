@@ -57,7 +57,7 @@ func outcome(err error) string {
 	return "io"
 }
 
-// scheduled measures exactly once. Measure retains the external Komari task
+// scheduled measures exactly once. Legacy measurements retain their task
 // compatibility policy; periodic monitoring must not hide slow/failed attempts.
 func (r *Runner) scheduled(ctx context.Context, t spec.PingTask, reachability bool) spec.ProbeMeasurement {
 	start := time.Now()

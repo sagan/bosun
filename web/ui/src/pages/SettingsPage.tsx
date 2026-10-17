@@ -1,5 +1,3 @@
-import { KomariCard } from '../components/KomariCard'
-import { DStatusCard } from '../components/DStatusCard'
 import { Alert, Anchor, Box, Button, Card, Group, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { IconArrowLeft, IconArrowRight, IconSearch } from '@tabler/icons-react'
 import { Link, useParams } from 'react-router-dom'
@@ -17,8 +15,6 @@ import { api } from '../lib/api'
 
 function Editor({ id }: { id: string }) {
   const { me } = useAuth()
-  if (id === 'komari') return <KomariCard readOnly={!!me?.fixed || me?.mode === 'managed'} />
-  if (id === 'dstatus') return <DStatusCard readOnly={!!me?.fixed || me?.mode === 'managed'} />
   if (id === 'mode') return <ModeCard />
   if (id === 'cores') return <CoresCard />
   if (id === 'backup') return <BackupCard />

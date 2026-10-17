@@ -677,7 +677,8 @@ type Probe struct {
 	Tasks       []PingTask       `json:"tasks,omitempty"`
 }
 
-// Komari makes the node report to a Komari monitoring server as a v2
+// Deprecated: retained only for decoding old configuration; ignored by bosun.
+// Komari formerly made the node report to a Komari monitoring server as a v2
 // agent: it registers itself once through the auto-discovery key, then
 // sends host metrics every few seconds and answers ping tasks.
 type Komari struct {
@@ -688,7 +689,8 @@ type Komari struct {
 	Interval int    `json:"interval,omitempty"` // report seconds, default 3
 }
 
-// DStatus makes the node answer a DStatus panel's scrapes as a
+// Deprecated: retained only for decoding old configuration; ignored by bosun.
+// DStatus formerly made the node answer a DStatus panel's scrapes as a
 // neko-status agent: the panel fetches "GET /stat" with a "key" header and
 // gets this host's sample back in neko-status' shape. Unlike Komari this
 // is a pull, so the node needs a port the panel can reach — the firewall

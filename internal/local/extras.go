@@ -462,95 +462,24 @@ func (s *Store) Probe() *spec.Probe {
 	return p
 }
 
-// ---- komari ----------------------------------------------------------------
-
-// KomariSettings returns the exporter configuration.
-func (s *Store) KomariSettings() spec.Komari {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.st.Komari
-}
-
-// SetKomari validates and stores it; a blank key keeps the stored one.
+// Legacy settings remain readable as disabled for old API clients.
+func (s *Store) KomariSettings() spec.Komari   { return spec.Komari{} }
+func (s *Store) DStatusSettings() spec.DStatus { return spec.DStatus{} }
 func (s *Store) SetKomari(k spec.Komari) error {
-	k.Server = strings.TrimRight(strings.TrimSpace(k.Server), "/")
-	k.Name = strings.TrimSpace(k.Name)
-	if k.Enabled && !strings.HasPrefix(k.Server, "http://") && !strings.HasPrefix(k.Server, "https://") {
-		return errors.New("komari: server must start with http:// or https://")
-	}
-	if k.Interval < 0 || k.Interval > 300 {
-		return errors.New("komari: interval must be 0-300 seconds")
+	if k.Enabled {
+		return errors.New("external monitoring integration has been removed")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if strings.TrimSpace(k.Key) == "" {
-		k.Key = s.st.Komari.Key
-	}
-	s.st.Komari = k
+	s.st.Komari = spec.Komari{}
 	return s.commit()
 }
-
-// Komari implements panel.KomariSource.
-func (s *Store) Komari() *spec.Komari {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.st.Komari.Enabled {
-		return nil
-	}
-	k := s.st.Komari
-	return &k
-}
-
-// DStatusSettings is the stored setting, for the UI.
-func (s *Store) DStatusSettings() spec.DStatus {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.st.DStatus
-}
-
-// SetDStatus validates and stores it; a blank key keeps the stored one.
 func (s *Store) SetDStatus(d spec.DStatus) error {
-	d.Listen = strings.TrimSpace(d.Listen)
-	d.Server = strings.TrimRight(strings.TrimSpace(d.Server), "/")
-	d.SID = strings.TrimSpace(d.SID)
-	if d.Mode != "" && d.Mode != "passive" && d.Mode != spec.DStatusActive {
-		return errors.New("dstatus: mode must be passive or active")
-	}
-	if d.Listen != "" {
-		if _, _, err := net.SplitHostPort(d.Listen); err != nil {
-			return errors.New("dstatus: listen must be host:port, e.g. :9999")
-		}
-	}
-	if d.Enabled && d.Active() {
-		if !strings.HasPrefix(d.Server, "http://") && !strings.HasPrefix(d.Server, "https://") {
-			return errors.New("dstatus: the panel URL must start with http:// or https://")
-		}
-		if d.SID == "" {
-			return errors.New("dstatus: active mode needs this node's server id (SID) from the panel")
-		}
-	}
-	if d.Interval < 0 || d.Interval > 300 {
-		return errors.New("dstatus: interval must be 0-300 seconds")
+	if d.Enabled {
+		return errors.New("external monitoring integration has been removed")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if strings.TrimSpace(d.Key) == "" {
-		d.Key = s.st.DStatus.Key
-	}
-	if d.Enabled && d.Key == "" {
-		return errors.New("dstatus: a key is required")
-	}
-	s.st.DStatus = d
+	s.st.DStatus = spec.DStatus{}
 	return s.commit()
-}
-
-// DStatus implements panel.DStatusSource.
-func (s *Store) DStatus() *spec.DStatus {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.st.DStatus.Enabled {
-		return nil
-	}
-	d := s.st.DStatus
-	return &d
 }

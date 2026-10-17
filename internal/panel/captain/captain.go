@@ -367,28 +367,6 @@ func (c *Client) Jobs() []agentproto.Job {
 	return append([]agentproto.Job(nil), c.state.Jobs...)
 }
 
-// Komari implements panel.KomariSource from the last pulled state.
-func (c *Client) Komari() *spec.Komari {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state == nil || c.state.Komari == nil {
-		return nil
-	}
-	k := *c.state.Komari
-	return &k
-}
-
-// DStatus implements panel.DStatusSource.
-func (c *Client) DStatus() *spec.DStatus {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.state == nil || c.state.DStatus == nil {
-		return nil
-	}
-	d := *c.state.DStatus
-	return &d
-}
-
 func (c *Client) Probe() *spec.Probe {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -63,7 +63,7 @@ type State struct {
 	Certificates []spec.Certificate `json:"certificates,omitempty"`
 	// Probe is the standalone monitoring configuration.
 	Probe ProbeSettings `json:"probe"`
-	// Komari reports this node to a Komari server as an agent.
+	// Retired exporter fields are retained to decode old local snapshots only.
 	Komari  spec.Komari  `json:"komari"`
 	DStatus spec.DStatus `json:"dstatus"`
 	// Overrides are per-core JSON objects merged into the rendered config.

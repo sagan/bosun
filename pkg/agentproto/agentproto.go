@@ -43,9 +43,9 @@ type State struct {
 	// Probe configures host monitoring beats; nil/disabled = only the
 	// coarse host snapshot inside Report.
 	Probe *spec.Probe `json:"probe,omitempty"`
-	// Komari asks the node to also report to a Komari server.
+	// Komari is a retired field, retained for wire compatibility and ignored.
 	Komari *spec.Komari `json:"komari,omitempty"`
-	// DStatus asks the node to answer a DStatus panel's scrapes.
+	// DStatus is a retired field, retained for wire compatibility and ignored.
 	DStatus *spec.DStatus `json:"dstatus,omitempty"`
 	// Jobs are one-off tasks the node should run once; results ride on a
 	// later Report and the panel then drops the job from the state.

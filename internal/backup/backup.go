@@ -1,5 +1,5 @@
 // Package backup archives and restores a standalone node's configuration:
-// the local state file, its traffic history, the Komari registration and
+// the local state file, its traffic history, legacy registration data and
 // operator-supplied certificates. ACME storage and panel TLS material are
 // left out on purpose; they are re-obtained.
 package backup
@@ -18,6 +18,7 @@ import (
 )
 
 // members are the files an archive may carry, relative to the data dir.
+// komari.json is inert but retained so old backups can still be restored.
 var members = []string{"local.json", "local.history.json", "komari.json"}
 
 const customCerts = "certs/custom"

@@ -15,12 +15,10 @@ import (
 	"github.com/zeptop-dev/bosun/internal/egressguard"
 
 	"log/slog"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/doctor"
-	"github.com/zeptop-dev/bosun/internal/komari"
 	"github.com/zeptop-dev/bosun/internal/probe"
 
 	"github.com/zeptop-dev/bosun/internal/certs"
@@ -28,7 +26,6 @@ import (
 	"github.com/zeptop-dev/bosun/internal/core"
 	"github.com/zeptop-dev/bosun/internal/coreinstall"
 	"github.com/zeptop-dev/bosun/internal/decoy"
-	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"github.com/zeptop-dev/bosun/internal/firewall"
 	"github.com/zeptop-dev/bosun/internal/forward"
 	"github.com/zeptop-dev/bosun/internal/ingressguard"
@@ -161,11 +158,7 @@ type Agent struct {
 	// probe config when the driver is a panel.Beater.
 	sampler sysinfo.Sampler
 	probes  probe.Runner
-	// komari reports to a Komari server when the driver carries a config.
-	komari komari.Exporter
-	// dstatus answers a DStatus panel's scrapes when one is configured.
-	dstatus dstatus.Exporter
-	// Version is the bosun release string reported to Komari.
+	// Version is the bosun release string.
 	Version string
 	// skipped are inbounds left out of the last apply (no certificate yet).
 	customCerts map[string]agentproto.CertStatus // pushed certificates by domain
@@ -314,20 +307,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	beat.Stop()
 	defer beat.Stop()
 	defer a.probes.Stop()
-	defer a.komari.Stop()
-	defer a.dstatus.Stop()
-	a.komari.CredFile, a.komari.Sampler, a.komari.Prober, a.komari.Log, a.komari.Version = filepath.Join(a.cfg.DataDir, "komari.json"), &a.sampler, &a.probes, a.log, a.Version
-	a.dstatus.Sampler, a.dstatus.Log, a.dstatus.Version = &a.sampler, a.log, a.Version
-	ks, _ := a.driver.(panel.KomariSource)
-	ds, _ := a.driver.(panel.DStatusSource)
 	beatEvery := time.Duration(0)
 	reconfigureBeat := func() {
-		if ks != nil {
-			a.komari.Configure(ctx, ks.Komari())
-		}
-		if ds != nil {
-			a.dstatus.Configure(ds.DStatus())
-		}
 		if beater == nil {
 			// Standalone: the local store decides when it can, else the
 			// config file; results only show up on /metrics and in the
@@ -383,11 +364,7 @@ func (a *Agent) Run(ctx context.Context) error {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("apply failed", "err", err)
 				}
-				// The exporters (Komari, DStatus) are configured from the
-				// driver's state on their own path; bring them in line
-				// before the self-check runs, or the doctor judges a
-				// state that is about to change and says so for the next
-				// ten minutes.
+				// Configure probe sampling before the self-check.
 				reconfigureBeat()
 				a.scheduleDoctor()
 			}
@@ -555,12 +532,6 @@ func (a *Agent) rebuildUserIndex() {
 		}
 	}
 }
-
-// KomariStatus reports the exporter's state for the UI.
-func (a *Agent) KomariStatus() komari.Status { return a.komari.Status() }
-
-// DStatusStatus is the DStatus endpoint's state, for the UI and doctor.
-func (a *Agent) DStatusStatus() dstatus.Status { return a.dstatus.Status() }
 
 // ProbeResults returns the latest carrier and task measurements.
 func (a *Agent) ProbeResults() []spec.PingResult { return a.probes.Results() }

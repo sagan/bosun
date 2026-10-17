@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zeptop-dev/bosun/internal/dstatus"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -93,7 +92,7 @@ func TestBindFirewallPanel(t *testing.T) {
 	rep := Run(context.Background(), Deps{Node: node, CoresKnown: true, Cores: []CoreState{{Name: "mita", Running: false, Inbounds: 1}},
 		Dial: func(context.Context, string) error { return nil }, Exec: exec,
 		Interfaces: func() []net.IP { return []net.IP{net.ParseIP("192.0.2.10")} },
-		Managed:    true, LastReport: now.Add(-10 * time.Minute), PushInterval: time.Minute, KomariEnabled: true, KomariError: "token rejected",
+		Managed:    true, LastReport: now.Add(-10 * time.Minute), PushInterval: time.Minute,
 		Now: func() time.Time { return now }})
 	if c := find(rep, "bind"); c.Status != Fail || !strings.Contains(c.Detail, "10.10.0.2") {
 		t.Fatalf("bind: %+v", c)
@@ -106,9 +105,6 @@ func TestBindFirewallPanel(t *testing.T) {
 	}
 	if c := find(rep, "panel"); c.Status != Warn {
 		t.Fatalf("panel: %+v", c)
-	}
-	if c := find(rep, "komari"); c.Status != Warn {
-		t.Fatalf("komari: %+v", c)
 	}
 	if c := find(rep, "time"); c.Status != Warn {
 		t.Fatalf("time: %+v", c)
@@ -171,55 +167,5 @@ func TestShaperUploadOnlyWarns(t *testing.T) {
 	d.Shaper = &shaper.Status{Supported: true, Users: 3, Interface: "eth0"}
 	if c := find(Run(context.Background(), d), "shaper"); c.Status != OK {
 		t.Fatalf("both directions: %+v", c)
-	}
-}
-
-// The DStatus endpoint is scraped, not pushed, so "up but nobody has ever
-// read it" is the interesting state — that is a firewall or a wrong
-// address in the panel, and a refused-key count says which.
-func TestDStatusCheck(t *testing.T) {
-	now := time.Now()
-	at := func(d Deps) Check {
-		d.Now = func() time.Time { return now }
-		return find(Run(context.Background(), d), "dstatus")
-	}
-
-	if c := at(Deps{}); c.Status != Skip {
-		t.Fatalf("off: %+v", c)
-	}
-	if c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", LastError: "bind: address already in use"}}); c.Status != Fail {
-		t.Fatalf("cannot listen: %+v", c)
-	}
-	c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", Denied: 3}})
-	if c.Status != Warn || !strings.Contains(c.Detail, "never scraped") || !strings.Contains(c.Detail, "wrong key") {
-		t.Fatalf("never scraped with refusals: %+v", c)
-	}
-	if c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", LastScrape: now.Add(-30 * time.Minute)}}); c.Status != Warn {
-		t.Fatalf("stale: %+v", c)
-	}
-	if c := at(Deps{DStatus: &dstatus.Status{Enabled: true, Listen: ":9999", LastScrape: now.Add(-5 * time.Second)}}); c.Status != OK {
-		t.Fatalf("healthy: %+v", c)
-	}
-}
-
-// Active mode is judged by whether the panel accepts the reports, and a
-// refusal after earlier acceptance is a warning that carries the reason.
-func TestDStatusActiveCheck(t *testing.T) {
-	now := time.Now()
-	at := func(st dstatus.Status) Check {
-		return find(Run(context.Background(), Deps{DStatus: &st, Now: func() time.Time { return now }}), "dstatus")
-	}
-	if c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3}); c.Status != Warn || !strings.Contains(c.Detail, "no report accepted") {
-		t.Fatalf("nothing accepted yet: %+v", c)
-	}
-	if c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3, LastError: "the panel URL must start with http:// or https://"}); c.Status != Fail {
-		t.Fatalf("cannot start: %+v", c)
-	}
-	if c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3, Reports: 9, LastReport: now.Add(-2 * time.Second)}); c.Status != OK {
-		t.Fatalf("healthy: %+v", c)
-	}
-	c := at(dstatus.Status{Enabled: true, Mode: "active", Server: "https://p.example.com", Interval: 3, Reports: 9, LastReport: now.Add(-5 * time.Minute), LastError: "panel refused the report: API 密钥无效"})
-	if c.Status != Warn || !strings.Contains(c.Detail, "密钥") {
-		t.Fatalf("stale with a reason: %+v", c)
 	}
 }

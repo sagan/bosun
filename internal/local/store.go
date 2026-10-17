@@ -846,12 +846,6 @@ func (s *Store) importManagedLocked(st *agentproto.State) {
 	}
 	s.st.Komari = spec.Komari{}
 	s.st.DStatus = spec.DStatus{}
-	if st.Komari != nil {
-		s.st.Komari = *st.Komari
-	}
-	if st.DStatus != nil {
-		s.st.DStatus = *st.DStatus
-	}
 }
 
 // ---- panel.Driver ----------------------------------------------------------

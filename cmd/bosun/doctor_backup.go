@@ -50,8 +50,6 @@ func cmdDoctor(args []string) error {
 			for _, c := range store.ListCertificates() {
 				deps.Certs = append(deps.Certs, doctor.CertState{Domain: c.Domain, NotAfter: c.NotAfter})
 			}
-			k := store.KomariSettings()
-			deps.KomariEnabled = k.Enabled
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

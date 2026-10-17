@@ -220,23 +220,3 @@ func TestNeedsHTTP01(t *testing.T) {
 // synced from the desired config, not the running exporter, because the
 // two are set up on different paths and the exporter is still off when
 // the setting first arrives.
-func TestDStatusPortIsOpenedOnlyWhenReachable(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		cfg  *spec.DStatus
-		want int
-	}{
-		{"off", nil, 0},
-		{"disabled", &spec.DStatus{Listen: ":9999"}, 0},
-		{"default listen", &spec.DStatus{Enabled: true}, 9999},
-		{"any address", &spec.DStatus{Enabled: true, Listen: "[::]:9999"}, 9999},
-		{"one address", &spec.DStatus{Enabled: true, Listen: "198.51.100.20:9100"}, 9100},
-		{"loopback", &spec.DStatus{Enabled: true, Listen: "127.0.0.1:9999"}, 0},
-		{"no colon", &spec.DStatus{Enabled: true, Listen: "9999"}, 0},
-		{"active mode dials out", &spec.DStatus{Enabled: true, Mode: spec.DStatusActive, Listen: ":9999"}, 0},
-	} {
-		if got := dstatusPortFor(tc.cfg); got != tc.want {
-			t.Errorf("%s: got %d, want %d", tc.name, got, tc.want)
-		}
-	}
-}

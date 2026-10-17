@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **Unreleased** — Remove Komari and DStatus external monitoring integrations: settings UI, registration/reporting, scrape listeners and exporter diagnostics. Keep built-in monitoring and the Glassmorphism theme. Legacy API paths return disabled settings and reject enabling; protocol/storage fields and historical migrations remain compatible. Old managed agents stop exporting after pulling Captain state; standalone agents require an upgrade.
+
 - **v0.67.1** (2026-10-13) — Fix the new release gate: the Go toolchain check compared against a line without a trailing space and refused a correct binary, so v0.67.0 has no release assets (tags never move). No code change.
 
 - **v0.67.0** (2026-10-13, tag only, no release) — Add `spec.PublicLabel` (no control or markup characters) and apply it to probe task names, so a label the public status page renders cannot become HTML; add `selfupdate.ValidTag` and refuse a malformed release tag before it is spliced into a GitHub API path (panels and the standalone updater share it). Standalone panel: every cookie-authenticated write and the login now reject cross-origin requests by Fetch metadata, not only the network diagnostic. CI/release: `go test` gets a 20 minute timeout, release binaries are checked for the Go toolchain pinned in go.mod, third-party actions are pinned by commit. Tests use documentation addresses only; golang.org/x/net v0.61.0 and x/crypto v0.58.0 (geocheck build included).

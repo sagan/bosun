@@ -127,8 +127,6 @@ internal/warp/        Cloudflare WARP registration and WireGuard outbound
 internal/shaper/      per-user bandwidth limits with nft connmark + tc
 internal/probe/       latency checks for the panel's status page (carrier probe points, icmp/tcp/http/download tasks), attached to every beat
 internal/netdiag/     bounded on-demand DNS, service, download and route diagnostics
-internal/komari/      reports the node to a Komari server as an agent
-internal/dstatus/     answers a DStatus panel's scrapes as a neko-status agent
 internal/doctor/      read-only self-check (listeners, certs, ports, firewall, disk, panel, clock)
 internal/backup/      standalone backup archive and restore
 internal/telegram/    Bot API client for the standalone panel (doctor alerts, /status)
@@ -298,8 +296,6 @@ consume it. Reconfiguration starts a new sequence epoch and discards the old
 configuration's pending results. Captain 1.7 deduplicates these attempts and
 provides history; older panels retain their previous aggregate behavior. The
 standalone UI shows current/rolling results without a persistent history store.
-Komari's externally requested ping tasks retain their existing compatibility
-policy separately from these periodic probes.
 
 ### On-demand diagnostics (v0.56)
 
@@ -324,52 +320,18 @@ Captain tasks expire after two minutes; both ends check expiry. Node restarts ma
 repeat an unexpired task before its result reaches Captain. Captain stores up to
 20 recent results from 24 hours; standalone keeps only the current page result.
 
-## Komari reporting
+## Retired external monitoring integrations
 
-Settings → Notifications and integrations → Komari reporting turns the node into a Komari agent: with the
-server URL and the auto-discovery key (Komari → Settings → General) it
-registers once (`POST /api/clients/register`, client named `Auto-<name>`),
-keeps the token in `<data_dir>/komari.json`, then posts `agent.basicInfo`
-and `agent.report` over JSON-RPC every few seconds and answers Komari's
-ping tasks (icmp/tcp/http) through its own probe runner. Only the `ping`
-capability is advertised: no terminal, file or exec access. Captain can push
-the same setting to every managed node (`state.komari`). A deleted client on
-the Komari side makes the node re-register automatically.
+Komari and DStatus registration, reporting and scrape endpoints have been removed.
+Use the built-in resource/network monitoring and status page. Captain's Glassmorphism
+React theme remains available and does not need a Komari server.
 
-## DStatus
-
-A [DStatus](https://github.com/fev125/dstatus) panel — the open-source one
-or the official build at dstatus.sh, which share the wire protocol — gets
-this node without its own `neko-status`/`dstatus-agent` on the box. Both
-of the panel's 通讯模式 are covered:
-
-- **passive (被动, the default)**: the node serves `GET /stat` on the
-  configured address (default `:9999`) and answers — the host sample in
-  neko-status' shape, wrapped as `{"success":true,"data":{…}}` — only when
-  the request carries the 通讯密钥 in a `key` header; anything else gets a
-  403 and is counted. The panel's optional `/ping` and `/tcping`
-  capability probes get a 404, which only greys out its "network quality"
-  feature. Because it is scraped, the port has to be reachable: the
-  firewall auto-open opens it while enabled (unless bound to loopback).
-- **active (主动)**: the node posts `{"sid","data"}` to the panel's
-  `/stats/update` (the path the open-source panel serves and the official
-  one aliases as `/api/report`) every `interval` seconds with the same
-  `key` header, and does not listen at all — for hosts the panel cannot
-  reach. It needs the panel URL and this node's server id (SID) from the
-  panel, and the server switched to 主动 there. The panel's task channel
-  (remote scripts, diagnostics) is deliberately not implemented.
-
-Either way that is the entire surface: no terminal, files or exec, and no
-listener at all without a key. The doctor's "DStatus" check warns when a
-passive endpoint is up but has never been read (a firewall, or the wrong
-address in the panel), when scrapes are refused for a wrong key, and in
-active mode when the panel stops accepting reports — with the panel's own
-reason. Captain pushes the setting to every managed node (`state.dstatus`,
-the SID per node); standalone keeps it in the local store (Settings → Notifications and integrations → DStatus).
-
-Per-core CPU percentages and per-interface counters come back empty —
-bosun does not measure them, and an empty list reads better in the panel
-than invented numbers.
+Legacy settings API paths retain their response shapes but return disabled settings;
+enabling them is rejected. Protocol fields and old database migrations are retained
+for compatibility. Captain no longer sends exporter configurations, so older managed
+agents stop exporting after their next successful state pull. Upgrade standalone
+agents to stop their exporters. Existing stored credentials are inert and are not
+read or sent; removing this feature does not delete remote monitoring accounts.
 
 ## Certificates
 
@@ -514,7 +476,7 @@ TCP connect on its bind address (UDP-only inbounds are skipped), bind
 addresses present on an interface, forward listeners and targets, certificate
 presence and expiry, port clashes across inbounds and forwards, a
 best-effort firewall look (a default-drop input policy without an accept
-rule for an inbound port), disk and swap, contact with the panel, Komari
+rule for an inbound port), disk and swap, contact with the panel,
 reporting and NTP sync. The agent runs it 30 s after start and every 10
 minutes and sends the result to Captain when it changed (at least every 30
 minutes) as `report.doctor`; the panel page "Doctor" (`GET /api/doctor`)
@@ -525,7 +487,7 @@ process does not run the cores, the core check is skipped there.
 ### Backup and restore (standalone)
 
 Settings → Backups and maintenance → Backup downloads `bosun-backup-<date>.tar.gz` with `local.json`,
-its traffic history, the Komari registration and operator certificates
+its traffic history, legacy backup data and operator certificates
 (`certs/custom`); ACME storage and panel TLS files are not included and are
 obtained again. Restore (`POST /api/backup/restore`, local mode only)
 validates the archive, refuses one taken while managed, writes the files

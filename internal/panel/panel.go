@@ -36,18 +36,6 @@ type JobSource interface {
 	Jobs() []agentproto.Job
 }
 
-// KomariSource is implemented by drivers that carry a Komari exporter
-// configuration (the local store's settings or Captain's state).
-type KomariSource interface {
-	Komari() *spec.Komari
-}
-
-// DStatusSource is implemented by drivers that carry a DStatus exporter
-// configuration for this node.
-type DStatusSource interface {
-	DStatus() *spec.DStatus
-}
-
 // ProbeSource is implemented by drivers that decide the probe configuration
 // without receiving beats (the local store): results stay on the node.
 type ProbeSource interface {

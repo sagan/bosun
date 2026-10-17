@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
 	"strings"
 
 	"github.com/zeptop-dev/bosun/internal/egressguard"
@@ -442,11 +440,6 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 		if needsHTTP01(node, byTag) {
 			ports = append(ports, firewall.Port{Proto: "tcp", Port: 80})
 		}
-		// The DStatus endpoint is scraped by the panel, so unlike Komari
-		// it needs its port reachable.
-		if p := a.dstatusPort(); p > 0 {
-			ports = append(ports, firewall.Port{Proto: "tcp", Port: p})
-		}
 		if err := a.Firewall.Apply(ctx, ports); err != nil {
 			a.log.Warn("firewall auto-open", "err", err)
 		}
@@ -561,42 +554,6 @@ func validateNode(node *spec.Node, log *slog.Logger, report func([]string)) *spe
 	cp := *node
 	cp.Routes, cp.AuditRules = routes, rules
 	return &cp
-}
-
-// dstatusPort is the port the DStatus endpoint will listen on, or 0 when
-// there is nothing to open: off, active mode (the node dials out and does
-// not listen), or bound to loopback. It reads the *desired* config rather
-// than the running exporter: the firewall is synced here during an apply
-// while the endpoint is (re)configured on its own path, so the exporter
-// can still say "off" for a setting that arrived in this very state.
-func (a *Agent) dstatusPort() int {
-	ds, ok := a.driver.(panel.DStatusSource)
-	if !ok {
-		return 0
-	}
-	return dstatusPortFor(ds.DStatus())
-}
-
-func dstatusPortFor(cfg *spec.DStatus) int {
-	if cfg == nil || !cfg.Enabled || cfg.Active() {
-		return 0
-	}
-	listen := cfg.Listen
-	if listen == "" {
-		listen = spec.DStatusListen
-	}
-	host, port, err := net.SplitHostPort(listen)
-	if err != nil {
-		return 0
-	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-		return 0
-	}
-	n, err := strconv.Atoi(port)
-	if err != nil || n < 1 || n > 65535 {
-		return 0
-	}
-	return n
 }
 
 // applyEgress also runs before bootstrap when disabled: offline panels must not

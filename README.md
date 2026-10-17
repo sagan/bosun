@@ -331,7 +331,7 @@ enabling them is rejected. Protocol fields and old database migrations are retai
 for compatibility. Captain no longer sends exporter configurations, so older managed
 agents stop exporting after their next successful state pull. Upgrade standalone
 agents to stop their exporters. Existing stored credentials are inert and are not
-read or sent; removing this feature does not delete remote monitoring accounts.
+used for exporter connections; removing this feature does not delete remote monitoring accounts.
 
 ## Certificates
 

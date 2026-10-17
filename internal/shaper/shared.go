@@ -285,11 +285,57 @@ func (s *Shared) filters(ctx context.Context, dev, direction string) ([]sharedFi
 		return nil, err
 	}
 	var list []sharedFilter
-	if json.Unmarshal(b, &list) != nil {
+	if json.Unmarshal(normalizeLegacyFWJSON(b), &list) != nil {
 		return nil, fmt.Errorf("invalid shared shaping filters")
 	}
 	return list, nil
 }
+
+// Older iproute2 prints the fw handle as plain text inside otherwise JSON
+// output. Normalize only that exact token outside quoted strings; retain the
+// mark and mask and let JSON decoding reject every other unexpected fragment.
+var legacyFWHandle = regexp.MustCompile(`^\{handle (0x[0-9a-fA-F]+)(?:/(0x[0-9a-fA-F]+))?[ \t\r\n]+("actions"[ \t\r\n]*:)`)
+
+func normalizeLegacyFWJSON(raw []byte) []byte {
+	var out strings.Builder
+	quoted, escaped := false, false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if quoted {
+			out.WriteByte(c)
+			if escaped {
+				escaped = false
+			} else if c == '\\' {
+				escaped = true
+			} else if c == '"' {
+				quoted = false
+			}
+			continue
+		}
+		if c == '"' {
+			quoted = true
+		}
+		if c == '{' {
+			match := legacyFWHandle.FindSubmatchIndex(raw[i:])
+			if match != nil {
+				mark, markErr := strconv.ParseUint(string(raw[i+match[2]:i+match[3]]), 0, 32)
+				mask := uint64(0xffffffff)
+				var maskErr error
+				if match[4] >= 0 {
+					mask, maskErr = strconv.ParseUint(string(raw[i+match[4]:i+match[5]]), 0, 32)
+				}
+				if markErr == nil && maskErr == nil {
+					fmt.Fprintf(&out, `{"fw":{"mark":"0x%x","mask":"0x%x"},`, mark, mask)
+					i += match[6] - 1
+					continue
+				}
+			}
+		}
+		out.WriteByte(c)
+	}
+	return []byte(out.String())
+}
+
 func (s *Shared) checkFilters(ctx context.Context, dev, direction string, owned bool, links map[string]sharedLink) error {
 	list, err := s.filters(ctx, dev, direction)
 	if err != nil {

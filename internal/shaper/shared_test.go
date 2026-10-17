@@ -143,3 +143,33 @@ func TestSharedOrphanRedirectRecoveryRejectsLiveForeignTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestSharedLegacyFWJSONRetainsEnforcement(t *testing.T) {
+	for _, tc := range []struct {
+		handle, target string
+		ok             bool
+	}{
+		{"0x10001", "ifb-bosun", true}, {"0x10001/0xffffffff", "ifb-bosun", true},
+		{"0x10001/0xffff", "ifb-bosun", false}, {"0x10001", "foreign0", false},
+		{"0x100000000", "ifb-bosun", false}, {"0x10001/0x100000000", "ifb-bosun", false},
+		{"0x10001 classid 1:2", "ifb-bosun", false},
+	} {
+		raw := `[{"protocol":"all","pref":49151,"kind":"fw","chain":0,"options":{handle ` + tc.handle + ` 
+  "actions":[{"kind":"mirred","direction":"egress","mirred_action":"redirect","to_dev":"` + tc.target + `"}]}}]`
+		s := &Shared{Legacy: &Shaper{Run: func(context.Context, string, ...string) ([]byte, error) { return []byte(raw), nil }}}
+		err := s.checkFilters(context.Background(), "eth0", "ingress", true, map[string]sharedLink{ifbDev: {}})
+		if (err == nil) != tc.ok {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+		if tc.ok {
+			list, err := s.filters(context.Background(), "eth0", "ingress")
+			if err != nil || list[0].Options.FW.Mark != "0x10001" {
+				t.Fatal("lost selector", err)
+			}
+		}
+	}
+	raw := []byte(`{"quoted":"{handle 0x1 \"actions\": something"}`)
+	if string(normalizeLegacyFWJSON(raw)) != string(raw) {
+		t.Fatal("rewrote quoted text")
+	}
+}

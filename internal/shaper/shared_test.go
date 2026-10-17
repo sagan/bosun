@@ -185,3 +185,18 @@ func TestSharedRecognizesCompleteLegacyIngressInventory(t *testing.T) {
 		t.Fatal("unproven legacy header accepted")
 	}
 }
+
+func TestSharedFiltersKeepExplicitHookDirection(t *testing.T) {
+	raw := `[{"ingress":true,"protocol":"all","pref":7,"kind":"matchall","chain":0}]`
+	s := &Shared{Legacy: &Shaper{Run: func(context.Context, string, ...string) ([]byte, error) { return []byte(raw), nil }}}
+	if err := s.checkFilters(context.Background(), "eth0", "egress", false, nil); err != nil {
+		t.Fatal("opposite hook treated as egress", err)
+	}
+	if err := s.checkFilters(context.Background(), "eth0", "ingress", false, nil); err == nil {
+		t.Fatal("foreign ingress ignored")
+	}
+	raw = `[{"ingress":true,"egress":true,"protocol":"all","pref":7,"kind":"matchall"}]`
+	if _, err := s.filters(context.Background(), "eth0", "egress"); err == nil {
+		t.Fatal("ambiguous direction accepted")
+	}
+}

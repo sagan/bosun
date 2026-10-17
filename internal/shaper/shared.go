@@ -260,6 +260,8 @@ func (s *Shared) links(ctx context.Context) (map[string]sharedLink, error) {
 }
 
 type sharedFilter struct {
+	Ingress  bool   `json:"ingress,omitempty"`
+	Egress   bool   `json:"egress,omitempty"`
 	Pref     int    `json:"pref"`
 	Kind     string `json:"kind"`
 	Protocol string `json:"protocol"`
@@ -288,7 +290,20 @@ func (s *Shared) filters(ctx context.Context, dev, direction string) ([]sharedFi
 	if json.Unmarshal(normalizeLegacyFWJSON(b), &list) != nil {
 		return nil, fmt.Errorf("invalid shared shaping filters")
 	}
-	return list, nil
+	// With an ingress-only qdisc, some tc versions also dump its filters
+	// for an egress query. They explicitly tag those rows as ingress; do not
+	// treat the same rule as belonging to both hooks (or delete the wrong one).
+	filtered := list[:0]
+	for _, f := range list {
+		if f.Ingress && f.Egress {
+			return nil, fmt.Errorf("ambiguous shared shaping filter direction")
+		}
+		if (direction == "egress" && f.Ingress) || (direction == "ingress" && f.Egress) {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered, nil
 }
 
 // Older iproute2 prints the fw handle as plain text inside otherwise JSON

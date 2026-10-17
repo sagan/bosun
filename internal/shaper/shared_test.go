@@ -200,3 +200,31 @@ func TestSharedFiltersKeepExplicitHookDirection(t *testing.T) {
 		t.Fatal("ambiguous direction accepted")
 	}
 }
+
+func TestSharedReplacesOnlyEmptyLegacyHook(t *testing.T) {
+	for _, nonempty := range []bool{false, true} {
+		var mutations []string
+		s := &Shared{Legacy: &Shaper{Run: func(_ context.Context, _ string, args ...string) ([]byte, error) {
+			command := strings.Join(args, " ")
+			if command == "-j qdisc show dev eth0" {
+				return []byte(`[{"kind":"htb"},{"kind":"ingress"}]`), nil
+			}
+			if command == "-j filter show dev eth0 ingress" {
+				if nonempty {
+					return []byte(`[{"kind":"matchall","pref":7}]`), nil
+				}
+				return []byte(`[]`), nil
+			}
+			mutations = append(mutations, command)
+			return nil, nil
+		}}}
+		err := s.prepareHooks(context.Background(), "eth0")
+		if nonempty {
+			if err == nil || len(mutations) > 0 {
+				t.Fatal("modified nonempty hook", err, mutations)
+			}
+		} else if err != nil || strings.Join(mutations, ";") != "qdisc delete dev eth0 ingress;qdisc replace dev eth0 clsact" {
+			t.Fatal("modified root or missed ingress transition", err, mutations)
+		}
+	}
+}

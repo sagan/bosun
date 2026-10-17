@@ -210,7 +210,7 @@ func (s *Shared) Reconcile(ctx context.Context, interfaces []string, limits []Li
 	for _, dev := range devs {
 		// Only empty or already-owned filter lists reached this point. Keep
 		// the physical root qdisc (including an operator's line limit).
-		if _, err := r.run(ctx, "tc", "qdisc", "replace", "dev", dev, "clsact"); err != nil {
+		if err := s.prepareHooks(ctx, dev); err != nil {
 			return err
 		}
 		if _, err := r.run(ctx, "tc", "filter", "add", "dev", dev, "ingress", "protocol", "all", "pref", "49150", "matchall", "action", "connmark", "continue"); err != nil {
@@ -229,6 +229,39 @@ func (s *Shared) Reconcile(ctx context.Context, interfaces []string, limits []Li
 		}
 	}
 	return s.finish(ctx, devs, key)
+}
+
+// Linux cannot replace an ingress-only qdisc with clsact in place. Retire
+// only its empty hook after verified legacy/shared filters have been removed;
+// the independent physical root qdisc must remain untouched.
+func (s *Shared) prepareHooks(ctx context.Context, dev string) error {
+	raw, err := s.Root().run(ctx, "tc", "-j", "qdisc", "show", "dev", dev)
+	if err != nil {
+		return err
+	}
+	var qdiscs []struct {
+		Kind string `json:"kind"`
+	}
+	if json.Unmarshal(raw, &qdiscs) != nil {
+		return fmt.Errorf("invalid shared shaping qdisc inventory")
+	}
+	for _, q := range qdiscs {
+		if q.Kind != "ingress" {
+			continue
+		}
+		filters, err := s.filters(ctx, dev, "ingress")
+		if err != nil {
+			return err
+		}
+		if len(filters) != 0 {
+			return fmt.Errorf("cannot replace nonempty ingress shaping hook")
+		}
+		if _, err := s.Root().run(ctx, "tc", "qdisc", "delete", "dev", dev, "ingress"); err != nil {
+			return err
+		}
+	}
+	_, err = s.Root().run(ctx, "tc", "qdisc", "replace", "dev", dev, "clsact")
+	return err
 }
 
 type sharedLink struct {

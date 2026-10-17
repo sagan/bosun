@@ -85,7 +85,10 @@ type Agent struct {
 	// Alert delivers an operator notification (Telegram); nil = none.
 	Alert func(text string)
 	// Shaper enforces per-user speed limits in the kernel; nil = none.
-	Shaper *shaper.Shaper
+	Shaper          *shaper.Shaper
+	wireGuard       *wireGuardRuntime
+	wireGuardActive atomic.Bool
+	shaperMu        sync.Mutex
 	// Realm runs forward rules with the realm backend; nil rejects them.
 	Realm *forward.Realm
 	// Guard drops packets for mita ports that arrive on the wrong local
@@ -256,6 +259,9 @@ func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metr
 // Run blocks until ctx is cancelled, then stops every core.
 func (a *Agent) Run(ctx context.Context) error {
 	defer a.stopAll()
+	if err := a.clearWireGuard(ctx); err != nil {
+		return fmt.Errorf("clear previous WireGuard state: %w", err)
+	}
 	if a.EgressDisabled && !a.MonitorOnly() {
 		a.applyEgress(ctx, &spec.Node{})
 	}
@@ -288,6 +294,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	push := time.NewTicker(iv.Push)
 	defer pull.Stop()
 	defer push.Stop()
+	wgTick := time.NewTicker(15 * time.Second)
+	defer wgTick.Stop()
 	// Self-check: once shortly after start, then every 10 minutes.
 	doctorTick := time.NewTicker(10 * time.Minute)
 	defer doctorTick.Stop()
@@ -406,6 +414,12 @@ func (a *Agent) Run(ctx context.Context) error {
 				a.log.Info("intervals updated", "pull", iv.Pull, "push", iv.Push)
 			}
 			reconfigureBeat()
+		case <-wgTick.C:
+			if a.wireGuardActive.Load() && a.node != nil && !a.modeChanging.Load() {
+				if err := a.apply(ctx); err != nil {
+					a.log.Error("WireGuard health reconcile", "err", err)
+				}
+			}
 		case <-doctorTick.C:
 			a.runDoctor(ctx)
 		case <-push.C:
@@ -546,6 +560,8 @@ func with(l map[string]string, k, v string) map[string]string {
 }
 
 func (a *Agent) stopAll() {
+	a.shaperMu.Lock()
+	defer a.shaperMu.Unlock()
 	// Run's context has already been cancelled; child processes are still
 	// alive until Stop. Persist their final sample before closing the driver.
 	drainCtx, drainCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -566,6 +582,9 @@ func (a *Agent) stopAll() {
 				a.log.Warn("stop failed", "core", name, "err", err)
 			}
 		}
+	}
+	if err := a.clearWireGuard(ctx); err != nil {
+		a.log.Warn("WireGuard shutdown cleanup", "err", err)
 	}
 }
 

@@ -165,6 +165,7 @@ type Brutal struct {
 
 // Inbound is one listener. A node may run many, possibly on different cores.
 type Inbound struct {
+	WireGuardSlot int             `json:"wireguard_slot,omitempty"`
 	SSH           *SSHServer      `json:"ssh,omitempty"`
 	PrivateAccess *PrivateAccess  `json:"private_access,omitempty"`
 	Reverse       *ReverseInbound `json:"reverse,omitempty"`
@@ -500,6 +501,7 @@ func (f Forward) BalanceMode() string {
 
 // Node is the complete desired state for this server.
 type Node struct {
+	WireGuardLinks  []WireGuardLink  `json:"wireguard_links,omitempty"`
 	ModeRevision    uint64           `json:"mode_revision,omitempty"`
 	Mode            NodeMode         `json:"mode,omitempty"`
 	EgressUpstreams []EgressUpstream `json:"egress_upstreams,omitempty"`

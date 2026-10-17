@@ -267,7 +267,8 @@
         "snellTLS": "Snell TLS 混淆需要 snell-server。",
         "unknown": "無法識別此核心，請選擇相容核心。",
         "privateAccess": "私網存取需要支援此功能的節點、核心及最近的能力回報。",
-        "listenAddress": "此 Mieru 建置不能綁定指定監聽 IP，請使用 mita。"
+        "listenAddress": "此 Mieru 建置不能綁定指定監聽 IP，請使用 mita。",
+        "wireguardReverse": "反向 WireGuard 需要支援此功能的 Linux 節點和 Xray 核心回報最新能力。"
       }
     }
   },

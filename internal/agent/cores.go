@@ -8,6 +8,8 @@ import (
 func (a *Agent) CoreCandidates() []spec.CoreCandidate {
 	out := a.reg.Candidates()
 	for i := range out {
+		// Never advertise a transport that this installation cannot enforce.
+		out[i].Capabilities.WireGuardReverse = out[i].Capabilities.WireGuardReverse && a.wireGuardReady()
 		out[i].Capabilities.PrivateAccess = out[i].Capabilities.PrivateAccess && a.privateAccessReady()
 	}
 	return out

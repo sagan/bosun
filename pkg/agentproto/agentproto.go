@@ -76,6 +76,7 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
+	WireGuard        *WireGuardReport   `json:"wireguard,omitempty"`
 	NodeModeRevision uint64             `json:"node_mode_revision,omitempty"`
 	NodeMode         spec.NodeMode      `json:"node_mode,omitempty"`
 	NodeModeError    string             `json:"node_mode_error,omitempty"`
@@ -243,4 +244,20 @@ type ReportResponse struct {
 	// UpgradeTo is a bosun release tag (e.g. "v0.6.0") the agent should
 	// install and restart into. Empty means nothing to do.
 	UpgradeTo string `json:"upgrade_to,omitempty"`
+}
+
+// WireGuardReport contains transport diagnostics, never subscriber accounting.
+// Applied is independent of Connected; neither proves exit Internet health.
+type WireGuardReport struct {
+	Available bool                  `json:"available"`
+	Applied   bool                  `json:"applied"`
+	Links     []WireGuardLinkStatus `json:"links"`
+}
+type WireGuardLinkStatus struct {
+	Slot      int    `json:"slot"`
+	Connected bool   `json:"connected"`
+	Handshake int64  `json:"handshake,omitempty"`
+	Receive   uint64 `json:"receive"`
+	Transmit  uint64 `json:"transmit"`
+	Error     string `json:"error,omitempty"`
 }

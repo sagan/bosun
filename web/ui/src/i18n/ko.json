@@ -267,7 +267,8 @@
         "snellTLS": "Snell TLS 난독화에는 snell-server가 필요합니다.",
         "unknown": "알 수 없는 코어입니다. 호환 코어를 선택하세요.",
         "privateAccess": "지원되는 노드와 코어의 최신 기능 보고가 필요합니다.",
-        "listenAddress": "이 Mieru 빌드는 특정 수신 IP에 바인딩할 수 없습니다. mita를 사용하세요."
+        "listenAddress": "이 Mieru 빌드는 특정 수신 IP에 바인딩할 수 없습니다. mita를 사용하세요.",
+        "wireguardReverse": "역방향 WireGuard에는 지원되는 Linux 노드와 Xray 코어의 최신 기능 보고가 필요합니다."
       }
     }
   },

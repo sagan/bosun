@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o /out/bosun ./cmd/bosun
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata iproute2 iproute2-tc nftables wireguard-tools
 # Docker upgrades use the optional host updater over its dedicated Unix socket.
 ENV IN_CONTAINER=1
 COPY --from=build /out/bosun /usr/local/bin/bosun

@@ -267,7 +267,8 @@
         "snellTLS": "Snell の TLS 難読化には snell-server が必要です。",
         "unknown": "不明なコアです。対応するコアを選択してください。",
         "privateAccess": "対応ノード・コアからの最新の機能報告が必要です。",
-        "listenAddress": "この Mieru ビルドは特定の IP にバインドできません。mita を使用してください。"
+        "listenAddress": "この Mieru ビルドは特定の IP にバインドできません。mita を使用してください。",
+        "wireguardReverse": "リバース WireGuard には、対応 Linux ノードと Xray コアからの最新の機能レポートが必要です。"
       }
     }
   },

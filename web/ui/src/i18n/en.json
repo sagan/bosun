@@ -267,7 +267,8 @@
         "snellTLS": "Snell TLS obfuscation requires snell-server.",
         "unknown": "This core is not recognized. Choose a compatible core.",
         "privateAccess": "Private access requires a recent capability report from a supported node and core.",
-        "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita."
+        "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita.",
+        "wireguardReverse": "Reverse WireGuard requires a fresh capability report from a supported Linux node and Xray core."
       }
     }
   },

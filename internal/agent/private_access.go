@@ -72,7 +72,7 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 	if err := a.applyEgress(ctx, node); err != nil {
 		return errors.Join(err, a.stopPrivateCores(ctx))
 	}
-	if len(limits) > 0 && a.Shaper != nil {
+	if len(limits) > 0 && a.Shaper != nil && !hasWireGuardTransit(node) {
 		if err := a.Shaper.Apply(ctx, limits); err != nil {
 			return errors.Join(err, a.stopPrivateCores(ctx))
 		}

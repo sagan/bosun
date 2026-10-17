@@ -37,6 +37,10 @@ type state struct {
 
 // render produces an Xray JSON configuration for the given inbounds.
 func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt renderOptions) ([]byte, *state, error) {
+	wgRules, wgOuts, wgErr := wireGuardRoutes(node, inbounds, users)
+	if wgErr != nil {
+		return nil, nil, wgErr
+	}
 	hasReverse := len(node.ReverseClients) > 0
 	for _, ib := range inbounds {
 		hasReverse = hasReverse || ib.Reverse != nil
@@ -88,7 +92,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 		}
 		st.users[ib.Tag] = byName
 		// Key excludes users: same key means only users may have changed.
-		policyKey, _ := json.Marshal(ib.PrivateAccess)
+		policyKey, _ := json.Marshal(m{"private_access": ib.PrivateAccess, "wireguard_slot": ib.WireGuardSlot})
 		keyParts = append(keyParts, string(policyKey))
 		noUsers, err := renderInbound(ib, nil)
 		if err != nil {
@@ -102,7 +106,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	if kb, err := json.Marshal(m{"o": node.Outbounds, "r": node.Routes, "d": node.DefaultOutbound, "dns": node.DNS, "lim": limitedUserIDs(node, users),
 		// Everything else that only a restart can pick up.
 		"audit": node.AuditRules, "priv": node.PrivateDestRules(), "eg": node.EgressByIngress,
-		"cl": opt.ConnLog, "ov": node.Overrides["xray"], "reverse": node.ReverseClients}); err == nil {
+		"cl": opt.ConnLog, "ov": node.Overrides["xray"], "reverse": node.ReverseClients, "wireguard": node.WireGuardLinks}); err == nil {
 		keyParts = append(keyParts, string(kb))
 	}
 	sum := sha256.Sum256([]byte(strings.Join(keyParts, "\n")))
@@ -142,6 +146,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	}
 	outs = append(outs, direct, block)
 	outs = append(outs, custom...)
+	outs = append(outs, wgOuts...)
 	var reverseRules []any
 	for _, ib := range inbounds {
 		if r := ib.Reverse; r != nil && !r.Receiver {
@@ -245,7 +250,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	// Anchor managed exits before operator split routes and shaping clones.
 	// Private-address blocking remains first on both ends. A missing dynamic
 	// reverse outbound fails closed in the pinned Xray version.
-	if len(reverseRules) > 0 {
+	if len(reverseRules) > 0 || len(wgRules) > 0 {
 		rules := renderRoutes(nil, nil, "", nil)
 		// Audit blocks still apply before a managed exit, on both sides.
 		rules = append(rules, renderRoutes(audit.BlockRules(node.AuditRules), nil, "", nil)[1:]...)
@@ -263,10 +268,11 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 				rules = append(rules, rr)
 			}
 		}
+		rules = append(rules, wgRules...)
 		rules = append(rules, renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)[1:]...)
 		cfg["routing"].(m)["rules"] = rules
 	}
-	privateNormal := renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)[1:]
+	privateNormal := append(append([]any{}, wgRules...), renderRoutes(node.Routes, balancerTags(node), node.DefaultOutbound, limitRules)[1:]...)
 	privateRules, privateOuts, err := core.PrivateRoutes("xray", node, inbounds, users, privateNormal, outs, node.DefaultOutbound)
 	if err != nil {
 		return nil, nil, err
@@ -296,6 +302,12 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 			}
 		}
 		routing["rules"] = append([]any{m{"type": "field", "inboundTag": []string{"bosun-private-dns"}, "outboundTag": "direct"}}, append(rules, privateNormal...)...)
+	}
+	if len(wgRules) > 0 {
+		cfg["routing"].(m)["domainStrategy"] = "IPOnDemand"
+		if cfg["dns"] == nil {
+			cfg["dns"] = m{"servers": []any{"localhost"}}
+		}
 	}
 	b, err := json.MarshalIndent(cfg, "", "  ")
 	return b, st, err

@@ -6,7 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
-- **Unreleased** — Remove Komari and DStatus external monitoring integrations: settings UI, registration/reporting, scrape listeners and exporter diagnostics. Keep built-in monitoring and the Glassmorphism theme. Legacy API paths return disabled settings and reject enabling; protocol/storage fields and historical migrations remain compatible. Old managed agents stop exporting after pulling Captain state; standalone agents require an upgrade.
+- **v0.68.0** (2026-10-17) — Add Captain-managed reverse WireGuard: B actively connects to A, A keeps subscriber authentication/accounting, and B enforces explicit private CIDR/protocol/port grants with SNAT. Preserve fail-closed routing, isolate endpoint services and overlapping LANs, persist resource ownership and checkpoint traffic before transport changes. Share per-user upload/download limits across physical egress and all managed WG links. Add capability/handshake reports, installation prerequisites and real Linux/Xray CI coverage.
+  - Remove Komari and DStatus external monitoring integrations: settings UI, registration/reporting, scrape listeners and exporter diagnostics. Keep built-in monitoring and the Glassmorphism theme. Legacy API paths return disabled settings and reject enabling; protocol/storage fields and historical migrations remain compatible. Old managed agents stop exporting after pulling Captain state; standalone agents require an upgrade.
 
 - **v0.67.1** (2026-10-13) — Fix the new release gate: the Go toolchain check compared against a line without a trailing space and refused a correct binary, so v0.67.0 has no release assets (tags never move). No code change.
 

@@ -267,7 +267,8 @@
         "snellTLS": "Snell TLS 混淆需要 snell-server。",
         "unknown": "无法识别此内核，请选择兼容内核。",
         "privateAccess": "私网访问需要支持此功能的节点、内核及最近的能力上报。",
-        "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。"
+        "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。",
+        "wireguardReverse": "反向 WireGuard 需要支持此功能的 Linux 节点和 Xray 内核上报最新能力。"
       }
     }
   },

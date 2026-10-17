@@ -86,11 +86,13 @@ func (a *Agent) runDoctor(ctx context.Context) {
 	// (tcpfit's qdisc unit, a hand-run tc script) deletes the root qdisc
 	// and bosun's speed-limit classes with it, and the desired limits have
 	// not changed, so nothing else would notice.
-	if a.Shaper != nil && !a.MonitorOnly() && !a.modeChanging.Load() {
+	a.shaperMu.Lock()
+	if a.Shaper != nil && !a.wireGuardActive.Load() && !a.MonitorOnly() && !a.modeChanging.Load() {
 		if err := a.Shaper.Resync(ctx); err != nil {
 			a.log.Warn("speed limit shaper resync", "err", err)
 		}
 	}
+	a.shaperMu.Unlock()
 	rep := a.Doctor(ctx)
 	a.alertOnNewFailures(rep)
 	a.statusMu.Lock()

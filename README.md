@@ -961,6 +961,18 @@ plus an ordered ACL4SSR rule list with presets) that generates every
 format at once. Under Captain the page is read-only and Captain's templates
 apply.
 
+## Managed reverse WireGuard (bosun 0.68 / Captain 1.20)
+
+Captain's exit-node editor connects B actively to A over kernel WireGuard.
+A authenticates and bills VLESS REALITY subscribers; B provides public egress
+and explicitly granted private CIDR/protocol/port access with SNAT. Shared tc
+classes enforce each user's limit across ordinary egress and all WG links on A.
+No tunnel failure falls back to A's direct exit. Both nodes require Linux,
+`wg`, `ip`, `nft`, `tc`, root network privileges and non-root protected cores.
+The feature requires fresh capabilities on both peers and Xray on A; it is not
+an independently editable standalone WireGuard client. See the
+[connection guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#managed-reverse-wireguard-captain-120--bosun-068).
+
 ## Managed VLESS Reverse
 
 Captain manages multi-transit VLESS Reverse connections with Xray; authentication and accounting stay on the transits, and the exit connects actively. The current tc per-user speed limits do not apply to this multiplexed path. See [the node guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#node-connections-vless-reverse).

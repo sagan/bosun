@@ -37,6 +37,10 @@ jobs:
       - name: Real private-access cores in isolated Linux namespaces
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y nftables iproute2 util-linux python3 openssl
+          sudo apt-get install -y nftables iproute2 util-linux python3 openssl wireguard-tools
           go test -c ./internal/privateintegration -o /tmp/bosun-private.test
           sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
+      - name: Real reverse WireGuard and shared subscriber accounting
+        run: |
+          go test -c ./internal/reversewg -o /tmp/bosun-reversewg.test
+          sudo env BOSUN_REVERSEWG_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-reversewg.test -test.run '^TestLinuxTransport$' -test.v -test.timeout 5m

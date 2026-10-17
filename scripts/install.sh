@@ -175,14 +175,14 @@ if [ "$MODE" = binary ]; then install -m 0755 "$TMP/bosun" /usr/local/bin/bosun.
 # nft and tc back the per-user speed limits, nft forwards and strict
 # ingress; minimal images (Debian cloud, Alpine) ship without them. Best
 # effort: bosun runs without them and the doctor says what is missing.
-if [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && { ! command -v nft >/dev/null || ! command -v tc >/dev/null; }; then
-  echo "installing nftables and iproute2 (speed limits, nft forwards, strict ingress)"
+if [ "$NODE_MODE" = full ] && [ "$MODE" = binary ] && { ! command -v nft >/dev/null || ! command -v tc >/dev/null || ! command -v ip >/dev/null || ! command -v wg >/dev/null; }; then
+  echo "installing nftables, iproute2 and wireguard-tools (network enforcement and managed tunnels)"
   if command -v apt-get >/dev/null; then
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables iproute2 wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
   elif command -v apk >/dev/null; then
-    apk add -q nftables iproute2 >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+    apk add -q nftables iproute2 iproute2-tc wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
   elif command -v dnf >/dev/null; then
-    dnf install -y -q nftables iproute-tc >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
+    dnf install -y -q nftables iproute iproute-tc wireguard-tools >/dev/null 2>&1 || echo "  could not install them; speed limits and nft forwards stay off" >&2
   fi
 fi
 

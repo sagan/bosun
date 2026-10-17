@@ -10,17 +10,18 @@ import (
 // CoreCapabilities describes the features implemented by a bosun adapter,
 // rather than everything the upstream binary may support.
 type CoreCapabilities struct {
-	PrivateAccess   bool       `json:"private_access,omitempty"`
-	VLESSReverse    bool       `json:"vless_reverse,omitempty"`
-	Protocols       []Protocol `json:"protocols"`
-	Transports      []string   `json:"transports,omitempty"`
-	Shadowsocks2022 bool       `json:"shadowsocks2022,omitempty"`
-	HotUserReload   bool       `json:"hot_user_reload,omitempty"`
-	Fallbacks       bool       `json:"fallbacks,omitempty"`
-	ProxyProtocol   bool       `json:"proxy_protocol,omitempty"`
-	SnellMultiUser  bool       `json:"snell_multi_user,omitempty"`
-	SnellObfsTLS    bool       `json:"snell_obfs_tls,omitempty"`
-	ShadowTLS       bool       `json:"shadow_tls,omitempty"`
+	WireGuardReverse bool       `json:"wireguard_reverse,omitempty"`
+	PrivateAccess    bool       `json:"private_access,omitempty"`
+	VLESSReverse     bool       `json:"vless_reverse,omitempty"`
+	Protocols        []Protocol `json:"protocols"`
+	Transports       []string   `json:"transports,omitempty"`
+	Shadowsocks2022  bool       `json:"shadowsocks2022,omitempty"`
+	HotUserReload    bool       `json:"hot_user_reload,omitempty"`
+	Fallbacks        bool       `json:"fallbacks,omitempty"`
+	ProxyProtocol    bool       `json:"proxy_protocol,omitempty"`
+	SnellMultiUser   bool       `json:"snell_multi_user,omitempty"`
+	SnellObfsTLS     bool       `json:"snell_obfs_tls,omitempty"`
+	ShadowTLS        bool       `json:"shadow_tls,omitempty"`
 	// MieruWildcardOnly marks embedded versions without listen IP support.
 	MieruWildcardOnly bool `json:"mieru_wildcard_only,omitempty"`
 }
@@ -31,6 +32,8 @@ func (c CoreCapabilities) Supports(ib Inbound) bool { return c.UnsupportedReason
 // (keys, addresses, required TLS, etc.) remains Inbound.Validate's job.
 func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
 	switch {
+	case ib.WireGuardSlot != 0 && !c.WireGuardReverse:
+		return "wireguardReverse"
 	case ib.Protocol == Mieru && c.MieruWildcardOnly && ib.Listen != "" && ib.Listen != "::" && ib.Listen != "0.0.0.0":
 		return "listenAddress"
 	case ib.PrivateAccess.Enabled() && (!c.PrivateAccess || ib.Protocol == WireGuard || (ib.Protocol == Snell && !ib.SnellMultiUser) || (c.VLESSReverse && (ib.Protocol == SOCKS || ib.Protocol == HTTP))):
@@ -68,7 +71,7 @@ type CoreCandidate struct {
 func CoreCatalog() []CoreCandidate {
 	return []CoreCandidate{
 		{"singbox", CoreCapabilities{PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
-		{"xray", CoreCapabilities{PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
+		{"xray", CoreCapabilities{WireGuardReverse: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
 		{"mita", CoreCapabilities{Protocols: []Protocol{Mieru}, HotUserReload: true}},
 		{"hysteria", CoreCapabilities{Protocols: []Protocol{Hysteria2}, HotUserReload: true}},
 		{"snell", CoreCapabilities{Protocols: []Protocol{Snell}, SnellObfsTLS: true}},

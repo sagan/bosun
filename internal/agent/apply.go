@@ -109,7 +109,7 @@ func (a *Agent) resolveCerts(ctx context.Context, node *spec.Node) {
 // stops cores as their assignment changes.
 func (a *Agent) apply(ctx context.Context) error {
 	a.lastAttempt = time.Now()
-	err := a.applyInner(ctx)
+	err := a.wireGuardFailure(ctx, a.applyInner(ctx))
 	a.dirty = err != nil
 	if err != nil {
 		a.applyErrors.Add(1)
@@ -141,7 +141,12 @@ func withSkip(m map[string]string, tag, reason string) map[string]string {
 }
 
 func (a *Agent) applyInner(ctx context.Context) error {
+	a.shaperMu.Lock()
+	defer a.shaperMu.Unlock()
 	if handled, err := a.applyNodeMode(ctx); handled {
+		return err
+	}
+	if err := a.prepareWireGuard(ctx); err != nil {
 		return err
 	}
 	if err := a.checkpointTraffic(ctx); err != nil {
@@ -243,7 +248,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	}
 	if a.Shaper == nil || !a.Shaper.Supported() {
 		if len(limits) > 0 {
-			if node.HasPrivateAccess() {
+			if node.HasPrivateAccess() || hasWireGuard(node) {
 				return errors.Join(fmt.Errorf("private access with speed limits requires Linux nft and tc"), a.stopPrivateCores(ctx))
 			}
 			cp := *node
@@ -266,12 +271,15 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	if err := a.preparePrivateAccess(ctx, node, limits); err != nil {
 		return err
 	}
+	if err := a.prepareWireGuardShaping(ctx, node, limits); err != nil {
+		return err
+	}
 	if runas.SetNetAdmin(len(limits) > 0 || node.HasPrivateAccess()) && runas.Active() {
 		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
 		restart = true
 	}
 	defer func() {
-		if a.Shaper != nil {
+		if a.Shaper != nil && !hasWireGuardTransit(node) {
 			if err := a.Shaper.Apply(ctx, limits); err != nil {
 				a.log.Error("speed limit shaper", "err", err)
 			}
@@ -395,6 +403,11 @@ func needsHTTP01(node *spec.Node, byTag map[string]string) bool {
 func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag map[string]string) {
 	var rules []ingressguard.Rule
 	var ports []firewall.Port
+	for _, link := range node.WireGuardLinks {
+		if !link.Exit {
+			ports = append(ports, firewall.Port{Proto: "udp", Port: link.ListenPort})
+		}
+	}
 	// mita >= 3.37.0 binds the address itself; older builds listen
 	// everywhere and need the nftables guard.
 	guardMita := !nativeListen(a.reg)

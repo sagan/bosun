@@ -96,6 +96,9 @@ func (a *Agent) applyNodeMode(ctx context.Context) (bool, error) {
 			}
 		}
 	}
+	if err := a.clearWireGuard(ctx); err != nil {
+		return true, err
+	}
 	if err := a.fwd.Apply(nil); err != nil {
 		return true, err
 	}

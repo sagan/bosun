@@ -975,6 +975,13 @@ The feature requires fresh capabilities on both peers and Xray on A; it is not
 an independently editable standalone WireGuard client. See the
 [connection guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#managed-reverse-wireguard-captain-120--bosun-068).
 
+B's host firewall must permit forwarding from the specific `bwg<slot>` interface
+to the intended public/LAN interface and allow replies. The listener auto-open
+feature does not alter UFW/firewalld forwarding policy. A handshake alone does
+not prove that subscriber traffic can pass a host default-drop forwarding chain;
+the connection guide includes scoped UFW rules. Bosun's destination restrictions
+remain in effect alongside the host firewall.
+
 ## Managed VLESS Reverse
 
 Captain manages multi-transit VLESS Reverse connections with Xray; authentication and accounting stay on the transits, and the exit connects actively. The current tc per-user speed limits do not apply to this multiplexed path. See [the node guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#node-connections-vless-reverse).

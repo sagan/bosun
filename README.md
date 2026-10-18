@@ -1053,3 +1053,37 @@ the destination inbound's current permission. No database migration is needed.
 ### Download and switch proxy cores
 
 Use **Overview → Core management** in standalone mode, or the corresponding card in Captain's node details. Download and activation are separate; versions come from the node's reviewed catalog. Official sing-box and sing-box Extended can coexist. Extended Mieru and SSH proxy support, subscription caveats and rollback behavior are documented in [Core management](docs/CORE_MANAGEMENT.md).
+
+### Public address observations (Captain 1.21 / bosun 0.69)
+
+Captain-managed full and monitor-only nodes independently probe outbound public
+IPv4 and IPv6 every five minutes. Two HTTPS responders must agree per family;
+connections bypass environment HTTP proxies and force the requested family.
+Probes run separately from configuration pulls and traffic reports. Unknown or
+failed probes never mean that an address should be deleted. Captain receives the
+sample timestamp and treats repeated cached reports as one observation.
+
+Captain displays these observed addresses separately from manually configured
+public entry addresses. Existing entries stay fixed unless an administrator opts
+that family into automatic following; explicit NAT/line entries and WG endpoints
+are not overwritten. OS-level routing/VPNs can affect the observed exit address,
+which is not proof that a public listener is reachable there. See Captain's node
+guide for confirmation, freshness and automatic-DNS requirements.
+
+### Three-carrier return-route diagnostics (Captain 1.21 / bosun 0.69)
+
+Captain can request an administrator-only `return_route` network diagnostic for
+a fixed Beijing/Shanghai/Guangzhou target set, separately for IPv4 and IPv6.
+Linux `traceroute` with ICMP/raw-socket access is required; checks never install
+software or change privileges. Full and monitor modes use the existing task
+channel. Collection shares the one-diagnostic-at-a-time guard, with three
+bounded child processes and four concurrent DNS ASN lookups, within 90 seconds.
+
+Results contain hop/RTT/origin-ASN evidence, destination reachability and
+conservative network labels. Public hops are queried through Team Cymru DNS;
+private hops stay local. Missing data remains unknown. Possible CN2 GIA is a
+hypothesis, not a service-tier guarantee. These are OS default routes, not
+forward-path measurements or forced proxy/WireGuard traffic. Captain owns
+optional scheduling and private history; no external monitoring integration
+is restored. Public endpoint catalog source (snapshot 2026-10-17):
+https://github.com/oneclickvirt/backtrace/blob/main/model/model.go

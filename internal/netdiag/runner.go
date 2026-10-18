@@ -41,12 +41,14 @@ func (r *Runner) Run(parent context.Context, in spec.DiagnosticRequest, dataDirs
 	}
 	defer r.busy.Store(false)
 	duration := MaxDuration
-	if in.Type == "exit" {
+	if in.Type == "exit" || in.Type == "return_route" {
 		duration = 90 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(parent, duration)
 	defer cancel()
 	switch in.Type {
+	case "return_route":
+		out.Route, out.Outcome = runReturnRoute(ctx, *in.Route)
 	case "exit":
 		root := ""
 		if len(dataDirs) > 0 {

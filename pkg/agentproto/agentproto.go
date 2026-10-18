@@ -76,6 +76,7 @@ type Beat struct {
 
 // Report is what bosun pushes every push interval.
 type Report struct {
+	PublicAddresses  *PublicAddresses   `json:"public_addresses,omitempty"`
 	WireGuard        *WireGuardReport   `json:"wireguard,omitempty"`
 	NodeModeRevision uint64             `json:"node_mode_revision,omitempty"`
 	NodeMode         spec.NodeMode      `json:"node_mode,omitempty"`

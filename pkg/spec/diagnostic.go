@@ -15,11 +15,12 @@ const DiagnosticTTLSeconds = 120
 // DiagnosticRequest describes one bounded, administrator-initiated check.
 // It deliberately has no command, flags, headers or request body fields.
 type DiagnosticRequest struct {
-	Type     string `json:"type"`
-	Services bool   `json:"services,omitempty"`
-	Target   string `json:"target"`
-	SourceIP string `json:"source_ip,omitempty"`
-	Resolver string `json:"resolver,omitempty"` // DNS only: literal IP, optional port
+	Route    *ReturnRouteRequest `json:"route,omitempty"`
+	Type     string              `json:"type"`
+	Services bool                `json:"services,omitempty"`
+	Target   string              `json:"target"`
+	SourceIP string              `json:"source_ip,omitempty"`
+	Resolver string              `json:"resolver,omitempty"` // DNS only: literal IP, optional port
 }
 
 type DiagnosticParams struct {
@@ -28,15 +29,16 @@ type DiagnosticParams struct {
 }
 
 type DiagnosticResult struct {
-	Type        string            `json:"type"`
-	Exit        json.RawMessage   `json:"exit,omitempty"`
-	StartedAt   int64             `json:"started_at"`
-	DurationMs  float64           `json:"duration_ms"`
-	Outcome     string            `json:"outcome"`
-	Addresses   []string          `json:"addresses,omitempty"`
-	Measurement *ProbeMeasurement `json:"measurement,omitempty"`
-	Output      string            `json:"output,omitempty"` // plain text; never HTML
-	Truncated   bool              `json:"truncated,omitempty"`
+	Route       *ReturnRouteResult `json:"route,omitempty"`
+	Type        string             `json:"type"`
+	Exit        json.RawMessage    `json:"exit,omitempty"`
+	StartedAt   int64              `json:"started_at"`
+	DurationMs  float64            `json:"duration_ms"`
+	Outcome     string             `json:"outcome"`
+	Addresses   []string           `json:"addresses,omitempty"`
+	Measurement *ProbeMeasurement  `json:"measurement,omitempty"`
+	Output      string             `json:"output,omitempty"` // plain text; never HTML
+	Truncated   bool               `json:"truncated,omitempty"`
 }
 
 func diagnosticHost(host string) bool {
@@ -77,7 +79,15 @@ func (r DiagnosticRequest) Validate() error {
 	if r.Services && r.Type != "exit" {
 		return fmt.Errorf("service checks are only valid for exit diagnostics")
 	}
+	if r.Route != nil && r.Type != "return_route" {
+		return fmt.Errorf("route options require return_route")
+	}
 	switch r.Type {
+	case "return_route":
+		if r.Target != "" || r.SourceIP != "" || r.Resolver != "" || r.Route == nil {
+			return fmt.Errorf("return routes use fixed targets and the node default route")
+		}
+		return r.Route.Validate()
 	case "exit":
 		if r.Target != "" || r.Resolver != "" {
 			return fmt.Errorf("exit diagnostics use fixed providers; no target or resolver is accepted")
@@ -97,7 +107,7 @@ func (r DiagnosticRequest) Validate() error {
 			return fmt.Errorf("target must be an HTTP(S) URL without credentials or a fragment")
 		}
 	default:
-		return fmt.Errorf("type must be dns, tcp, http, download, mtr, traceroute or exit")
+		return fmt.Errorf("type must be dns, tcp, http, download, mtr, traceroute, exit or return_route")
 	}
 	return nil
 }

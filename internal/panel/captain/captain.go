@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/dns"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -47,6 +48,7 @@ type Client struct {
 	usersSeen string // revision last returned by Users()
 	fwdSeen   string // revision last returned by Forwards()
 	upgradeTo string // from the last report response
+	addresses *agentproto.PublicAddresses
 
 	// Long-poll watcher: keeps a GET /state?wait= request open so a change
 	// on the panel reaches the agent within a second or two.
@@ -57,7 +59,7 @@ type Client struct {
 
 // Changed implements panel.Notifier; the first call starts the watcher.
 func (c *Client) Changed() <-chan struct{} {
-	c.watchOnce.Do(func() { go c.watch() })
+	c.watchOnce.Do(func() { go c.watch(); go c.watchAddresses() })
 	return c.changed
 }
 
@@ -336,6 +338,7 @@ func (c *Client) Forwards(ctx context.Context) ([]spec.Forward, bool, error) {
 // Report implements panel.Reporter: one combined POST per push interval.
 func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error) {
 	c.mu.Lock()
+	rep.PublicAddresses = c.addresses
 	if c.state != nil {
 		rep.Revision = c.state.Revision
 	}
@@ -429,4 +432,39 @@ func (c *Client) TrafficIdentity() string {
 		return ""
 	}
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(c.cfg.URL+"\x00"+c.token)))
+}
+
+// One serial sampler per driver, including monitor-only nodes. Network I/O is
+// independent of reports and config pulls, and is cancelled on driver shutdown.
+func (c *Client) watchAddresses() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-c.stop:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	tick := time.NewTicker(5 * time.Minute)
+	defer tick.Stop()
+	for {
+		if ctx.Err() != nil {
+			return
+		}
+		sampleCtx, done := context.WithTimeout(ctx, 12*time.Second)
+		sample := dns.ObservePublicAddresses(sampleCtx)
+		done()
+		if ctx.Err() != nil {
+			return
+		}
+		c.mu.Lock()
+		c.addresses = &sample
+		c.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
 }

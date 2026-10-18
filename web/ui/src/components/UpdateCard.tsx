@@ -2,7 +2,7 @@ import { Alert, Badge, Box, Button, Card, Code, Group, Modal, Stack, Text, Title
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type UpdateInfo } from '../lib/api'
 import { when } from '../lib/format'
@@ -20,6 +20,8 @@ function RestartOverlay({ version, submitting, onGiveUp }: { version?: string; s
   const [timedOut, setTimedOut] = useState(false)
   const [phase, setPhase] = useState('')
   const [unreachable, setUnreachable] = useState(false)
+  const submittingRef = useRef(submitting)
+  useEffect(() => { submittingRef.current = submitting }, [submitting])
   useEffect(() => {
     setToastMuted(true)
     const started = Date.now()
@@ -40,7 +42,7 @@ function RestartOverlay({ version, submitting, onGiveUp }: { version?: string; s
             if (stop) return
             setUnreachable(false)
             const job = info?.host_update?.job
-            if (job?.target === version) { setPhase(job.phase); if (job.phase === 'failed') { setTimedOut(true); return } }
+            if (!submittingRef.current && job?.target === version) { setPhase(job.phase); if (job.phase === 'failed') { setTimedOut(true); return } }
             if (info?.current === version && (!info.in_container || job?.phase === 'complete')) { window.location.reload(); return }
           } else { await api.get(ME_URL, request.signal); if (!stop) window.location.reload(); return }
         } catch { if (!stop) setUnreachable(true) } finally { clearTimeout(timeout) }

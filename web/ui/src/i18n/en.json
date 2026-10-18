@@ -575,7 +575,7 @@
     "restartingTitle": "Restarting",
     "upgradingTo": "Upgrading to {{version}}",
     "restartingHint": "Waiting for the service to come back. The page reloads by itself and you stay signed in.",
-    "restartTimeout": "No answer after 90 seconds. Startup may be slow or the upgrade failed; reload later and check the server logs if it persists.",
+    "restartTimeout": "No response within 30 minutes. Check the service and upgrade status before retrying.",
     "elapsed": "{{seconds}} s elapsed",
     "reload": "Reload page",
     "hostReady": "Host updater connected",
@@ -590,7 +590,10 @@
       "verifying": "Verifying running version and readiness",
       "complete": "Upgrade completed",
       "failed": "Upgrade failed"
-    }
+    },
+    "waitingService": "Waiting for service recovery",
+    "stageCount": "Stage {{current}} of {{total}} (not download percentage)",
+    "preparing": "Submitting the upgrade request and preparing the update…"
   },
   "doctor": {
     "title": "Doctor",

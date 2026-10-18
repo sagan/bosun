@@ -575,7 +575,7 @@
     "restartingTitle": "正在重启",
     "upgradingTo": "正在升级到 {{version}}",
     "restartingHint": "等待服务恢复，恢复后页面会自动刷新，登录状态会保留。",
-    "restartTimeout": "等了 90 秒服务还没有恢复。可能是启动较慢或升级失败，请稍后刷新页面，必要时到服务器上查看日志。",
+    "restartTimeout": "30 分钟内未恢复响应，请检查服务和升级状态后再重试。",
     "elapsed": "已等待 {{seconds}} 秒",
     "reload": "刷新页面",
     "hostReady": "宿主机升级服务已连接",
@@ -590,7 +590,10 @@
       "verifying": "核对运行版本和就绪状态",
       "complete": "升级完成",
       "failed": "升级失败"
-    }
+    },
+    "waitingService": "等待服务恢复",
+    "stageCount": "第 {{current}} / {{total}} 阶段（非下载百分比）",
+    "preparing": "正在提交升级请求并准备更新…"
   },
   "doctor": {
     "title": "体检",

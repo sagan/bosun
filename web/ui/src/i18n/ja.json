@@ -575,7 +575,7 @@
     "restartingTitle": "再起動中",
     "upgradingTo": "{{version}} へ更新中",
     "restartingHint": "サービスの復帰を待っています。復帰するとページは自動で再読み込みされ、ログインは維持されます。",
-    "restartTimeout": "90 秒待っても応答がありません。起動が遅いか更新に失敗した可能性があります。後で再読み込みし、続く場合はサーバーのログを確認してください。",
+    "restartTimeout": "30 分以内に応答が戻りませんでした。サービスと更新状態を確認してください。",
     "elapsed": "{{seconds}} 秒経過",
     "reload": "ページを再読み込み",
     "hostReady": "ホスト更新サービスに接続済み",
@@ -590,7 +590,10 @@
       "verifying": "実行バージョンと起動状態を確認中",
       "complete": "更新完了",
       "failed": "更新失敗"
-    }
+    },
+    "waitingService": "サービスの復旧を待っています",
+    "stageCount": "段階 {{current}} / {{total}}（ダウンロード率ではありません）",
+    "preparing": "更新を要求し、準備しています…"
   },
   "doctor": {
     "title": "診断",

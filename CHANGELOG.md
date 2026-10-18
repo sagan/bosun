@@ -6,6 +6,9 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.70.0** (2026-10-18) — Add explicit administrator-requested NextTrace Tiny installation and runtime checks through the existing diagnostic channel. Pin upstream v1.7.4 and amd64/arm64 SHA256 digests, install atomically into the private data directory, and report missing/incompatible tools and per-family ICMP permissions. Prefer the managed executable for return routes, with system traceroute as fallback; disable upstream enrichment and map uploads and preserve bounded public-only ASN lookups.
+  - Show real host-update stages in the standalone upgrade dialog, with elapsed time and indeterminate waiting when the service is unavailable. Open the dialog during the upgrade request and correct the thirty-minute timeout message.
+
 - **v0.69.0** (2026-10-17) — Add bounded Linux ICMP return-route diagnostics for three carriers in Beijing, Shanghai and Guangzhou, with IPv4/IPv6 hop evidence and conservative ASN-based labels. Support full and monitor-only nodes through the existing diagnostic job channel; report missing tools and incomplete paths explicitly. Public-hop ASN queries use Team Cymru; private hops are not queried.
   - Report independently observed public IPv4/IPv6 addresses every five minutes, requiring agreement from two direct HTTPS responders per family. Keep collection separate from configuration and accounting, timestamp samples and preserve unknown failures rather than deleting addresses.
 

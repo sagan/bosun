@@ -3,6 +3,7 @@ package netdiag
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/netip"
@@ -26,9 +27,14 @@ var routeTargets = map[string][2][3]string{
 	"guangzhou": {{"58.60.188.222", "210.21.196.6", "120.196.165.24"}, {"240e:97c:2f:3000::44", "2408:8756:f50:1001::c", "2409:8c54:871:1001::12"}},
 }
 
-func runReturnRoute(ctx context.Context, req spec.ReturnRouteRequest) (*spec.ReturnRouteResult, string) {
+func runReturnRoute(ctx context.Context, req spec.ReturnRouteRequest, roots ...string) (*spec.ReturnRouteResult, string) {
 	if runtime.GOOS != "linux" {
 		return &spec.ReturnRouteResult{City: req.City, Family: req.Family}, "unavailable"
+	}
+	if len(roots) > 0 && roots[0] != "" {
+		if path, err := routeToolPath(roots[0], false); err == nil && verifyRouteTool(path, nextTraceHashes[runtime.GOARCH]) == nil {
+			return collectReturnRoutes(ctx, req, path, net.DefaultResolver.LookupTXT, "nexttrace")
+		}
 	}
 	path, err := exec.LookPath("traceroute")
 	if err != nil {
@@ -37,8 +43,11 @@ func runReturnRoute(ctx context.Context, req spec.ReturnRouteRequest) (*spec.Ret
 	return collectReturnRoutes(ctx, req, path, net.DefaultResolver.LookupTXT)
 }
 
-func collectReturnRoutes(ctx context.Context, req spec.ReturnRouteRequest, path string, lookup func(context.Context, string) ([]string, error)) (*spec.ReturnRouteResult, string) {
+func collectReturnRoutes(ctx context.Context, req spec.ReturnRouteRequest, path string, lookup func(context.Context, string) ([]string, error), engines ...string) (*spec.ReturnRouteResult, string) {
 	out := &spec.ReturnRouteResult{City: req.City, Family: req.Family, Engine: "traceroute", Protocol: "icmp", RulesVersion: "1", ASNProvider: "Team Cymru DNS"}
+	if len(engines) > 0 {
+		out.Engine = engines[0]
+	}
 	family, index := "-4", 0
 	if req.Family == "ipv6" {
 		family, index = "-6", 1
@@ -55,11 +64,20 @@ func collectReturnRoutes(ctx context.Context, req spec.ReturnRouteRequest, path 
 			p := spec.RoutePath{Carrier: carriers[i], Target: target, Outcome: "ok", Hops: []spec.RouteHop{}, Evidence: []spec.RouteEvidence{}, Classification: "unknown"}
 			tctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(tctx, path, family, "-I", "-n", "-m", "30", "-q", "1", "-w", "1", target)
+			args := []string{family, "-I", "-n", "-m", "30", "-q", "1", "-w", "1", target}
+			if out.Engine == "nexttrace" {
+				args = nextTraceArgs(family, target)
+			}
+			cmd := exec.CommandContext(tctx, path, args...)
 			cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C"}
 			cmd.WaitDelay = time.Second
 			b := &boundedOutput{}
-			cmd.Stdout, cmd.Stderr = b, b
+			cmd.Stdout = b
+			if out.Engine == "nexttrace" {
+				cmd.Stderr = &boundedOutput{}
+			} else {
+				cmd.Stderr = b
+			}
 			if err := cmd.Run(); err != nil {
 				p.Outcome = "failed"
 			}
@@ -70,6 +88,13 @@ func collectReturnRoutes(ctx context.Context, req spec.ReturnRouteRequest, path 
 				p.Outcome = "truncated"
 			}
 			p.Hops = parseRouteHops(b.text())
+			if out.Engine == "nexttrace" {
+				var valid bool
+				p.Hops, valid = parseNextTrace(b.data)
+				if !valid && p.Outcome == "ok" {
+					p.Outcome = "invalid_report"
+				}
+			}
 			for j := range p.Hops {
 				ip, err := netip.ParseAddr(p.Hops[j].IP)
 				if err == nil && ip.Is4() != (index == 0) {
@@ -292,4 +317,55 @@ func classifyRoute(p *spec.RoutePath) {
 	if len(evidence["9929"]) > 0 && len(evidence["4837"]) > 0 || len(evidence["cmin2"]) > 0 && len(evidence["cmi"]) > 0 {
 		p.Classification = "mixed"
 	}
+}
+
+// Disable upstream enrichment, reverse DNS and trace-map uploads. Only public
+// hops are enriched by our existing bounded Team Cymru lookup afterwards.
+func nextTraceArgs(family, target string) []string {
+	return []string{family, "--traceroute", "--json", "--no-rdns", "--map", "--data-provider", "disable-geoip", "--max-hops", "30", "--queries", "1", "--max-attempts", "1", "--parallel-requests", "1", "--timeout", "1000", target}
+}
+func parseNextTrace(raw []byte) ([]spec.RouteHop, bool) {
+	var r struct {
+		Hops [][]struct {
+			Success bool
+			TTL     int
+			Address *struct{ IP string }
+			RTT     int64
+		}
+		StopReason *struct {
+			Hop     int
+			Reason  string
+			Markers []string
+		}
+	}
+	if json.Unmarshal(raw, &r) != nil || r.Hops == nil || len(r.Hops) > 30 {
+		return nil, false
+	}
+	out := []spec.RouteHop{}
+	for i, group := range r.Hops {
+		h := spec.RouteHop{TTL: i + 1}
+		if len(group) > 1 {
+			return nil, false
+		}
+		if len(group) == 1 {
+			g := group[0]
+			if g.TTL != i+1 {
+				return nil, false
+			}
+			if g.Success && g.Address != nil {
+				ip, err := netip.ParseAddr(g.Address.IP)
+				if err != nil || ip.Zone() != "" || g.RTT < 0 || g.RTT >= int64(60*time.Second) {
+					return nil, false
+				}
+				h.IP = ip.String()
+				ms := float64(g.RTT) / float64(time.Millisecond)
+				h.RTT = &ms
+			}
+		}
+		if r.StopReason != nil && r.StopReason.Hop == h.TTL && r.StopReason.Reason != "destination_reached" {
+			h.Reply = "!stop"
+		}
+		out = append(out, h)
+	}
+	return out, true
 }

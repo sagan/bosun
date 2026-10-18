@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Card, Code, Group, Loader, Modal, Stack, Text, Title } from '@mantine/core'
+import { Alert, Badge, Box, Button, Card, Code, Group, Modal, Stack, Text, Title } from '@mantine/core'
 import { modals } from '@mantine/modals'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconAlertTriangle, IconRefresh } from '@tabler/icons-react'
@@ -14,44 +14,60 @@ const ME_URL = '/api/me'
 // operator informed, error toasts are muted while requests fail, and once the
 // panel answers again the page reloads so the new bundle is served (sessions
 // survive restarts, so the operator stays signed in).
-function RestartOverlay({ version, onGiveUp }: { version?: string; onGiveUp: () => void }) {
+function RestartOverlay({ version, submitting, onGiveUp }: { version?: string; submitting?: boolean; onGiveUp: () => void }) {
   const { t } = useTranslation()
   const [seconds, setSeconds] = useState(0)
   const [timedOut, setTimedOut] = useState(false)
   const [phase, setPhase] = useState('')
+  const [unreachable, setUnreachable] = useState(false)
   useEffect(() => {
     setToastMuted(true)
     const started = Date.now()
     let stop = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let request: AbortController | undefined
     const tick = async () => {
       if (stop) return
       const elapsed = Math.round((Date.now() - started) / 1000)
       setSeconds(elapsed)
       if (elapsed >= 2) {
+        request = new AbortController()
+        const timeout = setTimeout(() => request?.abort(), 8000)
         try {
           if (version) {
-            const result = await api.get<UpdateInfo>('/api/update')
+            const result = await api.get<UpdateInfo>('/api/update', request.signal)
             const info = result
+            if (stop) return
+            setUnreachable(false)
             const job = info?.host_update?.job
             if (job?.target === version) { setPhase(job.phase); if (job.phase === 'failed') { setTimedOut(true); return } }
             if (info?.current === version && (!info.in_container || job?.phase === 'complete')) { window.location.reload(); return }
-          } else { await api.get(ME_URL); window.location.reload(); return }
-        } catch { /* still restarting */ }
+          } else { await api.get(ME_URL, request.signal); if (!stop) window.location.reload(); return }
+        } catch { if (!stop) setUnreachable(true) } finally { clearTimeout(timeout) }
       }
       if (elapsed >= 1800) { setTimedOut(true); return }
-      setTimeout(tick, 1000)
+      if (!stop) timer = setTimeout(tick, 1000)
     }
-    const h = setTimeout(tick, 1000)
-    return () => { stop = true; clearTimeout(h); setToastMuted(false) }
+    timer = setTimeout(tick, 1000)
+    return () => { stop = true; request?.abort(); clearTimeout(timer); setToastMuted(false) }
   }, [version])
+  const stages = ['checking', 'pulling', 'backing_up', 'recreating', 'verifying', 'complete']
+  const current = stages.indexOf(phase)
+  const label = submitting && !phase ? t('update.preparing') : unreachable ? t('update.waitingService') : phase ? t(`update.hostPhases.${phase}`) : t('update.waitingService')
   return (
     <Modal opened onClose={() => {}} withCloseButton={false} closeOnClickOutside={false} closeOnEscape={false} centered>
       <Stack align="center" gap="sm" py="md">
-        {timedOut ? <IconAlertTriangle size={36} color="var(--mantine-color-orange-6)" /> : <Loader />}
+        {timedOut ? <IconAlertTriangle size={36} color="var(--mantine-color-orange-6)" /> : null}
         <Title order={4}>{version ? t('update.upgradingTo', { version }) : t('update.restartingTitle')}</Title>
         <Text size="sm" c="dimmed" ta="center">{phase === 'failed' ? t('update.hostFailed') : timedOut ? t('update.restartTimeout') : t('update.restartingHint')}</Text>
-        <Text size="xs" c="dimmed">{t('update.elapsed', { seconds })}</Text>
-        {phase && <Text size="sm">{t(`update.hostPhases.${phase}`)}</Text>}
+        <Box w="100%" role="status" aria-live="polite">
+          {(current < 0 || unreachable) && !timedOut ? <progress style={{ width: '100%' }} aria-label={label} /> : <Group gap={4} wrap="nowrap" aria-hidden="true">
+            {stages.map((stage, i) => <Box key={stage} style={{ flex: 1, height: 8, borderRadius: 4, background: timedOut ? 'var(--mantine-color-orange-5)' : i < current ? 'var(--mantine-color-teal-6)' : i === current ? 'var(--mantine-primary-color-filled)' : 'var(--mantine-color-default-hover)' }} />)}
+          </Group>}
+          <Text size="sm" ta="center" mt="sm">{label}</Text>
+          <Text size="xs" c="dimmed" ta="center" mt={4}>{t('update.elapsed', { seconds })}</Text>
+          {current >= 0 && !timedOut && <Text size="xs" c="dimmed" ta="center">{t('update.stageCount', { current: current + 1, total: stages.length })}</Text>}
+        </Box>
         {timedOut && (
           <Group gap="xs">
             <Button size="xs" onClick={() => window.location.reload()}>{t('update.reload')}</Button>
@@ -70,7 +86,7 @@ export function UpdateCard({ mb }: { mb?: string }) {
   const q = useQuery({ queryKey: ['update'], queryFn: () => api.get<UpdateInfo>('/api/update'), retry: false, refetchInterval: (query) => { const phase = query.state.data?.host_update?.job?.phase; return phase && !['complete', 'failed'].includes(phase) ? 3000 : false } })
   const check = useMutation({ mutationFn: () => api.get<UpdateInfo>('/api/update?force=1'), onSuccess: (d) => qc.setQueryData(['update'], d), onError: toast.err })
   const afterExit = (r: { installed?: string }) => setRestarting({ version: r?.installed })
-  const apply = useMutation({ mutationFn: () => api.post<{ installed?: string }>('/api/update/apply'), onSuccess: afterExit, onError: toast.err })
+  const apply = useMutation({ mutationFn: () => api.post<{ installed?: string }>('/api/update/apply'), onSuccess: afterExit, onError: (e) => { setRestarting(null); setToastMuted(false); toast.err(e) } })
   const rollback = useMutation({ mutationFn: () => api.post<{ installed?: string }>('/api/update/rollback'), onSuccess: afterExit, onError: toast.err })
   const restart = useMutation({ mutationFn: () => api.post<{ installed?: string }>('/api/restart'), onSuccess: () => afterExit({}), onError: toast.err })
   const d = q.data
@@ -83,7 +99,7 @@ export function UpdateCard({ mb }: { mb?: string }) {
           <Button size="xs" variant="default" leftSection={<IconRefresh size={14} />} loading={check.isPending} onClick={() => check.mutate()}>{t('update.check')}</Button>
         </Group>
       </Group>
-      {restarting && <RestartOverlay version={restarting.version} onGiveUp={() => { setRestarting(null); qc.invalidateQueries() }} />}
+      {restarting && <RestartOverlay submitting={apply.isPending} version={restarting.version} onGiveUp={() => { setRestarting(null); qc.invalidateQueries() }} />}
       {d?.warning && <Text size="xs" c="orange" mb="xs">{d.warning}</Text>}
       {d && (
         <Stack gap="sm">
@@ -104,7 +120,7 @@ export function UpdateCard({ mb }: { mb?: string }) {
           </Alert>}
           <Group gap="xs">
             {d.has_update && (!d.in_container || d.host_update?.available) && d.release_build && (
-              <Button size="xs" color="orange" loading={apply.isPending} onClick={() => modals.openConfirmModal({ title: t('update.apply'), children: <Text size="sm">{t('update.applyConfirm', { version: d.latest })}</Text>, labels: { confirm: t('update.apply'), cancel: t('common.cancel') }, confirmProps: { color: 'orange' }, onConfirm: () => apply.mutate() })}>{t('update.apply')}</Button>
+              <Button size="xs" color="orange" loading={apply.isPending} onClick={() => modals.openConfirmModal({ title: t('update.apply'), children: <Text size="sm">{t('update.applyConfirm', { version: d.latest })}</Text>, labels: { confirm: t('update.apply'), cancel: t('common.cancel') }, confirmProps: { color: 'orange' }, onConfirm: () => { setRestarting({ version: d.latest }); apply.mutate() } })}>{t('update.apply')}</Button>
             )}
             {d.has_backup && !d.in_container && (
               <Button size="xs" variant="default" loading={rollback.isPending} onClick={() => modals.openConfirmModal({ title: t('update.rollback'), children: <Text size="sm">{t('update.rollbackConfirm', { version: d.backup_version || '?' })}</Text>, labels: { confirm: t('update.rollback'), cancel: t('common.cancel') }, onConfirm: () => rollback.mutate() })}>{t('update.rollback', { version: d.backup_version ? ` ${d.backup_version}` : '' })}</Button>

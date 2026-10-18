@@ -24,7 +24,7 @@ async function request<T>(method: string, url: string, body?: unknown, signal?: 
 }
 
 export const api = {
-  get: <T>(url: string) => request<T>('GET', url),
+  get: <T>(url: string, signal?: AbortSignal) => request<T>('GET', url, undefined, signal),
   post: <T>(url: string, body?: unknown, signal?: AbortSignal) => request<T>('POST', url, body ?? {}, signal),
   put: <T>(url: string, body: unknown) => request<T>('PUT', url, body),
   del: <T>(url: string) => request<T>('DELETE', url),

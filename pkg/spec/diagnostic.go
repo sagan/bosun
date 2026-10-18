@@ -29,6 +29,7 @@ type DiagnosticParams struct {
 }
 
 type DiagnosticResult struct {
+	Tool        *RouteToolStatus   `json:"tool,omitempty"`
 	Route       *ReturnRouteResult `json:"route,omitempty"`
 	Type        string             `json:"type"`
 	Exit        json.RawMessage    `json:"exit,omitempty"`
@@ -83,6 +84,10 @@ func (r DiagnosticRequest) Validate() error {
 		return fmt.Errorf("route options require return_route")
 	}
 	switch r.Type {
+	case "route_tool_check", "route_tool_install":
+		if r.Target != "" || r.SourceIP != "" || r.Resolver != "" || r.Route != nil {
+			return fmt.Errorf("tool operations accept no target or route options")
+		}
 	case "return_route":
 		if r.Target != "" || r.SourceIP != "" || r.Resolver != "" || r.Route == nil {
 			return fmt.Errorf("return routes use fixed targets and the node default route")

@@ -575,7 +575,7 @@
     "restartingTitle": "正在重新啟動",
     "upgradingTo": "正在升級到 {{version}}",
     "restartingHint": "等待服務恢復，恢復後頁面會自動重新整理，登入狀態會保留。",
-    "restartTimeout": "等了 90 秒服務仍未恢復。可能是啟動較慢或升級失敗，請稍後重新整理頁面，必要時到伺服器上查看日誌。",
+    "restartTimeout": "30 分鐘內未恢復回應，請檢查服務及升級狀態後再重試。",
     "elapsed": "已等待 {{seconds}} 秒",
     "reload": "重新整理頁面",
     "hostReady": "宿主機升級服務已連線",
@@ -590,7 +590,10 @@
       "verifying": "核對執行版本和就緒狀態",
       "complete": "升級完成",
       "failed": "升級失敗"
-    }
+    },
+    "waitingService": "等待服務恢復",
+    "stageCount": "第 {{current}} / {{total}} 階段（非下載百分比）",
+    "preparing": "正在提交升級請求並準備更新…"
   },
   "doctor": {
     "title": "健檢",

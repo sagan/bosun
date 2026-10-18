@@ -41,14 +41,20 @@ func (r *Runner) Run(parent context.Context, in spec.DiagnosticRequest, dataDirs
 	}
 	defer r.busy.Store(false)
 	duration := MaxDuration
-	if in.Type == "exit" || in.Type == "return_route" {
+	if in.Type == "exit" || in.Type == "return_route" || in.Type == "route_tool_install" {
 		duration = 90 * time.Second
 	}
 	ctx, cancel := context.WithTimeout(parent, duration)
 	defer cancel()
+	root := ""
+	if len(dataDirs) > 0 {
+		root = dataDirs[0]
+	}
 	switch in.Type {
+	case "route_tool_check", "route_tool_install":
+		out.Tool, out.Outcome = runRouteTool(ctx, root, in.Type == "route_tool_install")
 	case "return_route":
-		out.Route, out.Outcome = runReturnRoute(ctx, *in.Route)
+		out.Route, out.Outcome = runReturnRoute(ctx, *in.Route, root)
 	case "exit":
 		root := ""
 		if len(dataDirs) > 0 {

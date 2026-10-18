@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/zeptop-dev/bosun/internal/audit"
+	"github.com/zeptop-dev/bosun/internal/hostmanage"
 
 	"github.com/zeptop-dev/bosun/internal/connlog"
 
@@ -62,10 +63,10 @@ import (
 // newUpdater returns the self-update client for this binary. minVersion
 // (config min_version) is the floor no update or rollback may go below.
 func newUpdater(minVersion string) *selfupdate.Client {
-	// An older binary ignores managed WG routing fields and could serve a
-	// cached subscriber inbound directly. Keep this floor even after restart.
-	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.68.0", minVersion) {
-		minVersion = "v0.68.0"
+	// Older binaries cannot execute pending host recovery and also ignore
+	// managed WG fields. Keep the recovery-capable floor after restart.
+	if !selfupdate.ValidTag(minVersion) || selfupdate.Newer("v0.71.0", minVersion) {
+		minVersion = "v0.71.0"
 	}
 	return &selfupdate.Client{Repo: "zeptop-dev/bosun", Binary: "bosun", Version: version, MinVersion: minVersion}
 }
@@ -112,6 +113,15 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
+	case "internal-host-recover":
+		if len(os.Args) != 3 {
+			err = fmt.Errorf("data directory required")
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			err = hostmanage.Recover(ctx, os.Args[2])
+		}
+
 	case "installer-check-layout":
 		if len(os.Args) != 3 {
 			err = fmt.Errorf("config path required")

@@ -1109,3 +1109,7 @@ https://github.com/nxtrace/NTrace-core/releases/tag/v1.7.4; its source and licen
 are available at that tag. No upstream implementation is linked into bosun.
 Built-in enrichment, reverse DNS and map uploads are disabled. The existing
 Team Cymru/public-hop-only policy and conservative classification remain intact.
+
+### Host management
+
+Captain node details expose observed host state, individual changes and operation history. Native root Debian/Ubuntu systemd nodes support bounded management jobs with independent local recovery for access/network changes. Other environments are read-only; missing system packages are not installed automatically.

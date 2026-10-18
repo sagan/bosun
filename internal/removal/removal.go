@@ -22,6 +22,7 @@ import (
 
 	"github.com/zeptop-dev/bosun/internal/config"
 	"github.com/zeptop-dev/bosun/internal/firewall"
+	"github.com/zeptop-dev/bosun/internal/hostmanage"
 	"github.com/zeptop-dev/bosun/internal/local"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
@@ -122,6 +123,9 @@ func Start(ctx context.Context, cfgPath string, cfg *config.Config, p Plan) erro
 		p.Init = "openrc"
 	} else {
 		return errors.New("remote removal requires systemd or OpenRC")
+	}
+	if err := hostmanage.CanRemove(cfg.DataDir); err != nil {
+		return err
 	}
 	dir := filepath.Join("/var/tmp", "bosun-removal-"+p.ID)
 	if err := os.Mkdir(dir, 0700); err != nil {
@@ -393,6 +397,9 @@ func execute(ctx context.Context, p Plan, run command, paths installation, clean
 }
 
 func cleanNetwork(ctx context.Context, paths installation) error {
+	if err := hostmanage.Cleanup(ctx, paths.data); err != nil {
+		return err
+	}
 	// These helpers know which qdisc/classes and firewall openings belong to
 	// bosun. Unrelated host firewall and shaping configuration stays intact.
 	if err := (&shaper.Shaper{}).Apply(ctx, nil); err != nil {

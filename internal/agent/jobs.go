@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/hostmanage"
 	"github.com/zeptop-dev/bosun/internal/netdiag"
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/realityscan"
@@ -71,6 +72,24 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		return out
 	}
 	switch j.Kind {
+	case spec.HostManagementKind:
+		var p spec.HostJobParams
+		if json.Unmarshal(j.Params, &p) != nil || p.Validate() != nil {
+			out.Error = "invalid host management request"
+			break
+		}
+		now := time.Now().Unix()
+		if p.ExpiresAt <= now || p.ExpiresAt > now+spec.HostManagementTTL+30 {
+			out.Error = "host management request expired or clock is out of sync"
+			break
+		}
+		jctx, cancel := context.WithDeadline(ctx, time.Unix(p.ExpiresAt, 0))
+		defer cancel()
+		dataDir := ""
+		if a.cfg != nil {
+			dataDir = a.cfg.DataDir
+		}
+		out.Result, _ = json.Marshal(hostmanage.Run(jctx, dataDir, a.modeIdentity(), j.ID, p.HostRequest))
 	case spec.CoreManagementKind:
 		var p spec.CoreJobParams
 		if err := json.Unmarshal(j.Params, &p); err != nil || p.Validate() != nil {

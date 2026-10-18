@@ -343,19 +343,24 @@ func Run(ctx context.Context, dataDir, identity, job string, r spec.HostRequest)
 	// Inspect never modifies host configuration. A writable data directory permits
 	// reading pending state under the same interprocess lock as mutations.
 	if r.Action == "inspect" {
-		m := realMachine()
+		// Never hold the recovery lock across observation subprocesses. A slow
+		// systemctl query must not starve an expired local recovery deadline.
+		state := realMachine().inspect(ctx)
 		g, lock, e := openManager(dataDir)
 		if e == nil {
-			defer lock.Close()
-			return spec.HostResult{Outcome: "ok", State: g.snapshot(ctx)}
+			if t := g.pending(); t != nil {
+				state.Pending = &spec.HostPending{ID: t.ID, Section: t.Section, Deadline: t.Deadline, Phase: t.Phase}
+			}
+			lock.Close()
+			return spec.HostResult{Outcome: "ok", State: state}
 		}
-		state := m.inspect(ctx)
 		for i := range state.Items {
 			state.Items[i].Editable = false
 			state.Items[i].Reason = "host_busy_or_storage"
 		}
 		return spec.HostResult{Outcome: "unavailable", State: state, Message: "host journal is busy or unavailable; retry inspection"}
 	}
+
 	g, lock, e := openManager(dataDir)
 	if e != nil {
 		return spec.HostResult{Outcome: "failed", Message: e.Error()}

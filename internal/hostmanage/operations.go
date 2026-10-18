@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/zeptop-dev/bosun/pkg/spec"
 	"golang.org/x/crypto/ssh"
@@ -340,6 +341,15 @@ func (g *manager) plan(ctx context.Context, r spec.HostRequest) (*transaction, e
 			return nil, bad
 		}
 		path := "/var/lib/bosun-host.swap"
+		var disk syscall.Statfs_t
+		if e := syscall.Statfs(g.m.path("/var/lib"), &disk); e != nil {
+			return nil, errors.New("cannot check swap allocation space")
+		}
+		free := uint64(disk.Bavail) * uint64(disk.Bsize)
+		reserve := max(uint64(512<<20), free/10)
+		if free < uint64(mb)*(1<<20)+reserve {
+			return nil, errors.New("insufficient free space; swap allocation must leave at least 512 MiB and ten percent free")
+		}
 		fstab := g.m.read("/etc/fstab")
 		exists := g.m.exists(path)
 		if mb == 0 {

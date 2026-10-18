@@ -1,6 +1,7 @@
 package hostmanage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/netip"
@@ -399,6 +400,13 @@ func (g *manager) readyAdmin(ctx context.Context) bool {
 	return false
 }
 func (g *manager) verify(ctx context.Context, t *transaction) error {
+	for _, f := range t.Files {
+		b, e := readLimited(g.m.path(f.Path))
+		if e != nil || !bytes.Equal(b, f.After) {
+			return errors.New("configuration changed before verification")
+		}
+	}
+
 	switch t.Section {
 	case "hostname":
 		v, e := g.m.run(ctx, "hostname")
@@ -435,11 +443,48 @@ func (g *manager) verify(ctx context.Context, t *transaction) error {
 		}
 
 	case "fail2ban":
+		_, e := g.m.run(ctx, "fail2ban-client", "status", "sshd")
 		if t.Values["enabled"] == "true" {
-			if _, e := g.m.run(ctx, "fail2ban-client", "status", "sshd"); e != nil {
+			if e != nil {
 				return errors.New("sshd jail did not start")
 			}
+			for _, key := range []string{"bantime", "findtime", "maxretry"} {
+				out, e := g.m.run(ctx, "fail2ban-client", "get", "sshd", key)
+				if e != nil || strings.TrimSpace(out) != t.Values[key] {
+					return errors.New("effective Fail2ban policy differs from request")
+				}
+			}
+		} else if e == nil {
+			return errors.New("sshd jail remains active")
 		}
+	case "updates":
+		out, e := g.m.run(ctx, "apt-config", "shell", "UPDATE", "APT::Periodic::Unattended-Upgrade", "REBOOT", "Unattended-Upgrade::Automatic-Reboot")
+		if e != nil {
+			return errors.New("cannot verify effective update policy")
+		}
+		policy := props(out)
+		want := "'0'"
+		if t.Values["enabled"] == "true" {
+			want = "'1'"
+		}
+		if policy["UPDATE"] != want || policy["REBOOT"] != "'false'" {
+			return errors.New("effective update policy differs from request")
+		}
+	case "network":
+		for _, c := range t.Do {
+			if c.Name != "sysctl" {
+				continue
+			}
+			key, want, ok := strings.Cut(c.Args[1], "=")
+			if !ok {
+				return errors.New("invalid sysctl plan")
+			}
+			out, e := g.m.run(ctx, "sysctl", "-n", key)
+			if e != nil || strings.TrimSpace(out) != want {
+				return errors.New("network parameter did not become effective")
+			}
+		}
+
 	case "time":
 		s, e := g.m.run(ctx, "timedatectl", "show", "--property=Timezone")
 		if e != nil || props(s)["Timezone"] != t.Values["timezone"] {

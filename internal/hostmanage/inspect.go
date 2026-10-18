@@ -87,7 +87,13 @@ func (m *machine) inspect(ctx context.Context) *spec.HostSnapshot {
 		}
 	}
 	sort.Strings(users)
-	add("admin", map[string]string{"administrators": strings.Join(users, ", "), "key_fingerprints": strings.Join(fingerprints, "\n")}, passwd != "", sshOK, "ssh_complex_or_socket")
+	adminReason := "ssh_complex_or_socket"
+	adminEditable := sshOK
+	if !m.exists("/usr/bin/sudo") || !m.exists("/usr/sbin/visudo") || !m.exists("/usr/sbin/useradd") {
+		adminEditable = false
+		adminReason = "requires_admin_tools"
+	}
+	add("admin", map[string]string{"administrators": strings.Join(users, ", "), "key_fingerprints": strings.Join(fingerprints, "\n")}, passwd != "", adminEditable, adminReason)
 	ufw, ue := m.run(ctx, "ufw", "status")
 	fw := strings.HasPrefix(ufw, "Status: active")
 	backend := "ufw"

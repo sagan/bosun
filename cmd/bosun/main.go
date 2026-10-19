@@ -458,7 +458,7 @@ func cmdRun(args []string) error {
 		if cfg.Web != nil {
 			if _, p, err := net.SplitHostPort(cfg.Web.Listen); err == nil {
 				if n, err := strconv.Atoi(p); err == nil && n > 0 {
-					extraPorts = append(extraPorts, firewall.Port{Proto: "tcp", Port: n})
+					extraPorts = append(extraPorts, firewall.Port{Proto: "tcp", Port: n, Source: "system:local-panel"})
 				}
 			}
 		}

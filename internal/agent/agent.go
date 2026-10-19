@@ -277,11 +277,6 @@ func (a *Agent) Run(ctx context.Context) error {
 	if err := a.applyForwards(ctx); err != nil {
 		a.log.Error("forwards", "err", err)
 	}
-	// The firewall openings computed during apply did not see the forward
-	// listeners yet (they start after); refresh once they are up.
-	if a.kernelNode != nil {
-		a.applyKernelHelpers(ctx, a.kernelNode, a.kernelByTag)
-	}
 	a.setStatus(func(s *Status) { s.Ready = true })
 	a.runJobs(ctx)
 
@@ -297,6 +292,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	wgTick := time.NewTicker(15 * time.Second)
 	defer wgTick.Stop()
 	// Self-check: once shortly after start, then every 10 minutes.
+	firewallTick := time.NewTicker(time.Minute)
+	defer firewallTick.Stop()
 	doctorTick := time.NewTicker(10 * time.Minute)
 	defer doctorTick.Stop()
 	go func() {
@@ -419,6 +416,14 @@ func (a *Agent) Run(ctx context.Context) error {
 				if err := a.apply(ctx); err != nil {
 					a.log.Error("WireGuard health reconcile", "err", err)
 				}
+			}
+		case <-firewallTick.C:
+			if a.Firewall != nil && !a.modeChanging.Load() {
+				if err := a.Firewall.Refresh(ctx); err != nil {
+					a.log.Warn("firewall reconcile", "err", err)
+				}
+				st := a.Firewall.Status()
+				a.setStatus(func(s *Status) { s.Firewall = &st })
 			}
 		case <-doctorTick.C:
 			a.runDoctor(ctx)

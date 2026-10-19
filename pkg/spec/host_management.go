@@ -37,11 +37,12 @@ type HostPending struct {
 	Phase    string `json:"phase"`
 }
 type HostSnapshot struct {
-	CheckedAt   int64        `json:"checked_at"`
-	Environment string       `json:"environment"`
-	Revision    string       `json:"revision"`
-	Items       []HostItem   `json:"items"`
-	Pending     *HostPending `json:"pending,omitempty"`
+	Firewall    *FirewallStatus `json:"firewall,omitempty"`
+	CheckedAt   int64           `json:"checked_at"`
+	Environment string          `json:"environment"`
+	Revision    string          `json:"revision"`
+	Items       []HostItem      `json:"items"`
+	Pending     *HostPending    `json:"pending,omitempty"`
 }
 type HostResult struct {
 	State   *HostSnapshot `json:"state,omitempty"`

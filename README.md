@@ -647,10 +647,23 @@ over HTTP-01** — an inbound with `auto_cert` that is not set to `dns`, or
 the decoy site. Without that last one the first issuance succeeds on a
 fresh machine and a renewal fails two months later.
 
-The sync happens when bosun applies state. **Turning the firewall on after
-bosun is already running leaves the ports closed until the next apply**, so
-restart bosun (`systemctl restart bosun`) after enabling ufw. SSH is never
-bosun's business: open it yourself.
+Synchronization runs after configuration/forward changes and retries every minute.
+Rules are keyed by TCP/UDP plus local port, retaining every listener reference.
+Remote outbound ports do not open local listeners. UFW rules carry a private
+ownership comment; firewalld uses distinct journal-owned rich rules in the
+recorded default zone (positive priority 20000–29999), in both runtime and
+permanent configuration, without a global reload. Existing plain allowances
+are retained, not adopted. Unknown legacy records and externally edited or
+conflicting rules require manual review; deleting a service cannot safely
+remove those old allowances. Backend/zone changes are reported for review.
+
+Captain's **Node → Host management → Firewall** shows rule sources and the last
+synchronization result with bosun v0.72.0+. Refresh host state to update it.
+A synchronized rule does not prove public connectivity: earlier deny rules,
+non-default firewalld zones, cloud firewalls and NAT mappings can still block
+traffic. This does not alter WG forwarding policy. SSH rules remain explicitly
+managed by the operator. Disabling `firewall_auto_open` stops reconciliation;
+it does not delete existing rules.
 
 ### PROXY protocol (real client addresses behind a relay)
 

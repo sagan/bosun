@@ -405,7 +405,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	var ports []firewall.Port
 	for _, link := range node.WireGuardLinks {
 		if !link.Exit {
-			ports = append(ports, firewall.Port{Proto: "udp", Port: link.ListenPort})
+			ports = append(ports, firewall.Port{Proto: "udp", Port: link.ListenPort, Source: fmt.Sprintf("wireguard:%d", link.Slot)})
 		}
 	}
 	// mita >= 3.37.0 binds the address itself; older builds listen
@@ -416,6 +416,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 			continue
 		}
 		for _, p := range listenPorts(ib) {
+			p.Source = "inbound:" + ib.Tag
 			ports = append(ports, p)
 			if guardMita && byTag[ib.Tag] == "mita" && ib.Listen != "" && ib.Listen != "0.0.0.0" && ib.Listen != "::" {
 				rules = append(rules, ingressguard.Rule{IP: ib.Listen, Proto: p.Proto, Port: p.Port})
@@ -442,7 +443,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 	if a.Firewall != nil {
 		for _, f := range a.fwd.Snapshot() {
 			for _, proto := range forwardProtocols(f.Protocol) {
-				ports = append(ports, firewall.Port{Proto: proto, Port: f.Port})
+				ports = append(ports, firewall.Port{Proto: proto, Port: f.Port, Source: "forward:" + f.Tag})
 			}
 		}
 		ports = append(ports, a.ExtraPorts...)
@@ -451,7 +452,7 @@ func (a *Agent) applyKernelHelpers(ctx context.Context, node *spec.Node, byTag m
 		// from the internet — at every renewal too, two months after
 		// anyone last thought about the firewall.
 		if needsHTTP01(node, byTag) {
-			ports = append(ports, firewall.Port{Proto: "tcp", Port: 80})
+			ports = append(ports, firewall.Port{Proto: "tcp", Port: 80, Source: "certificate:http01"})
 		}
 		if err := a.Firewall.Apply(ctx, ports); err != nil {
 			a.log.Warn("firewall auto-open", "err", err)
@@ -520,7 +521,11 @@ func (a *Agent) applyForwards(ctx context.Context) error {
 		}
 		rules = append(rules, a.node.Forwards...)
 	}
-	return a.fwd.Apply(rules)
+	err := a.fwd.Apply(rules)
+	if a.kernelNode != nil {
+		a.applyKernelHelpers(ctx, a.kernelNode, a.kernelByTag)
+	}
+	return err
 }
 
 // nativeListen reports whether the mita core binds addresses itself

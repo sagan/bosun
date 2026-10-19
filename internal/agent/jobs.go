@@ -89,7 +89,15 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		if a.cfg != nil {
 			dataDir = a.cfg.DataDir
 		}
-		out.Result, _ = json.Marshal(hostmanage.Run(jctx, dataDir, a.modeIdentity(), j.ID, p.HostRequest))
+		result := hostmanage.Run(jctx, dataDir, a.modeIdentity(), j.ID, p.HostRequest)
+		if result.State != nil {
+			status := spec.FirewallStatus{State: "disabled", CheckedAt: time.Now().Unix()}
+			if a.Firewall != nil {
+				status = a.Firewall.Status()
+			}
+			result.State.Firewall = &status
+		}
+		out.Result, _ = json.Marshal(result)
 	case spec.CoreManagementKind:
 		var p spec.CoreJobParams
 		if err := json.Unmarshal(j.Params, &p); err != nil || p.Validate() != nil {

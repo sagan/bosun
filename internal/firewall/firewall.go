@@ -50,13 +50,14 @@ type ledger struct {
 	Legacy  []string         `json:"legacy,omitempty"`
 }
 type Manager struct {
-	StateFile string
-	Run       func(context.Context, string, ...string) ([]byte, error)
-	mu        sync.Mutex
-	data      ledger
-	loaded    bool
-	status    Status
-	desired   []Port
+	StateFile  string
+	Run        func(context.Context, string, ...string) ([]byte, error)
+	mu         sync.Mutex
+	data       ledger
+	loaded     bool
+	status     Status
+	desired    []Port
+	desiredSet bool
 }
 type boundedOutput struct{ bytes.Buffer }
 
@@ -114,7 +115,7 @@ func (m *Manager) Status() Status {
 func (m *Manager) Refresh(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.loaded {
+	if !m.desiredSet {
 		return nil
 	}
 	return m.apply(ctx, m.desired)
@@ -350,6 +351,7 @@ func (m *Manager) syncRule(ctx context.Context, e entry, want bool) (string, err
 func (m *Manager) Apply(ctx context.Context, ports []Port) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.desiredSet = true
 	m.desired = append([]Port(nil), ports...)
 	return m.apply(ctx, ports)
 }

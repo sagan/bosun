@@ -663,7 +663,8 @@ A synchronized rule does not prove public connectivity: earlier deny rules,
 non-default firewalld zones, cloud firewalls and NAT mappings can still block
 traffic. This does not alter WG forwarding policy. SSH rules remain explicitly
 managed by the operator. Disabling `firewall_auto_open` stops reconciliation;
-it does not delete existing rules.
+it does not delete existing rules. The updater floor is v0.72.0 because older
+binaries cannot preserve the ownership ledger and may adopt manual rules.
 
 ### PROXY protocol (real client addresses behind a relay)
 

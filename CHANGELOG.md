@@ -6,7 +6,7 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
-- **v0.72.0** (2026-10-19) — Protect firewall rule ownership with durable intent, tagged UFW rules and distinct firewalld rich rules; preserve manual and ambiguous legacy allowances. Reconcile shared listener references after forward changes and periodically retry drift/failures. Expose per-port sources and synchronization state through host inspection.
+- **v0.72.0** (2026-10-19) — Protect firewall rule ownership with durable intent, tagged UFW rules and distinct firewalld rich rules; preserve manual and ambiguous legacy allowances. Reconcile shared listener references after forward changes and periodically retry drift/failures. Expose per-port sources and synchronization state through host inspection. Keep the updater floor at v0.72.0 to preserve the ownership ledger.
 
 - **v0.71.0** (2026-10-18) — Add typed host observation and management jobs for native Debian/Ubuntu systemd installations, independent local recovery, stale-plan and replay protection, and explicit read-only capability reporting. Manage hostname, time, supported SSH/admin access, UFW allow rules, installed Fail2ban/update policy, DNS, network parameters and dedicated swap creation without replacing proxy routing or qdiscs. Keep the updater compatibility floor at v0.71.0 so pending recovery remains executable.
 

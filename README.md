@@ -23,6 +23,7 @@ Verified end to end against the manifest's tested releases (sing-box
 - Durable Captain reporting journals, structured Linux exit diagnostics with a separately rebuilt MIT GeoCheck tool, and named typed inbound/outbound/route presets with change previews. [Operation and failure boundaries](docs/DIAGNOSTICS_AND_PRESETS.md).
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
+- Automatic private-access enforcement (v0.74): independent adapter/runtime capability reports, prerequisite checks, and acknowledged core-only authorization for direct sing-box/Extended exits. Existing dual-layer policies remain compatible. [Details](#automatic-private-access-enforcement).
 - Default-off per-inbound private destination access for supported sing-box/Xray configurations, with CIDR/protocol/port scopes, UID/socket-mark nft enforcement and independent managed Reverse exit permissions. Existing user tc classes are retained; unsupported proxy chains and overrides are rejected. [Usage and support boundaries](#per-inbound-private-access-bosun-063--captain-114).
 - Per-inbound user lists (`spec.Inbound.ScopedUsers`): an inbound restricted to a user group only provisions that group; the mita adapter runs one instance per inbound because mita users are global to a process.
 - WARP outbounds reuse existing account credentials across official and Extended sing-box; distribution-specific rendering avoids unsupported fields while preserving stored credentials. [WARP compatibility and live checks](docs/CORE_MANAGEMENT.md#warp-outbound).
@@ -1129,3 +1130,81 @@ Team Cymru/public-hop-only policy and conservative classification remain intact.
 Captain node details expose observed host state, individual changes and operation history. Native root Debian/Ubuntu systemd nodes support bounded management jobs with independent local recovery for access/network changes. Other environments are read-only; missing system packages are not installed automatically.
 
 Captain-managed nodes report their current OS hostname on each regular report; Captain v1.26.0+ updates the hostname without changing the administrator-assigned node name.
+
+### Private-access installation readiness
+
+Root installation of bosun is supported. `cores.user` selects the separate,
+non-root account used by proxy subprocesses. New full installations prepare
+that account and check prerequisites before starting the service. Monitor-only
+installations skip this preparation. Existing configurations are preserved.
+
+For existing installations, run inside the node/container as the service
+administrator:
+
+```sh
+bosun prepare-private-access -c /etc/bosun/config.yaml
+```
+
+The command creates only the configured non-root account if missing. It checks
+Linux, nftables, egress protection, global exemptions, process capabilities and
+read-only kernel nftables access. It does not edit configuration, install
+packages, restart services or change firewall rules. Install missing `nftables`
+with the distribution package manager. Review `cores.user`, `cores.egress_guard`
+and `cores.egress_allow` rather than overwriting an existing policy.
+
+Full Docker installations need `cap_add: [NET_ADMIN]` in addition to Docker's
+standard capabilities. The installer adds this to newly generated Compose files;
+existing files are not rewritten. Recreate the container after adjusting its
+capabilities. `privileged: true` is unnecessary. Restricted service capability
+sets must also permit SETUID/SETGID/SETPCAP in the agent and
+NET_BIND_SERVICE/NET_ADMIN in proxy children.
+
+Configuration changes require restarting bosun, which interrupts proxy
+connections. Enabling isolation or removing global exceptions can block formerly
+allowed traffic. Captain's node readiness card explains each failed condition;
+its **Recheck** action only reads runtime state and tests `nft list tables`, with
+a five-second command timeout. Basic prerequisite reports are not proof that an
+inbound policy has been applied or a private destination is reachable. Protocol,
+routing and runtime fail-closed enforcement remain in effect.
+
+### Automatic private-access enforcement
+
+Ordinary inbound settings expose the authorization scope (off/internal/custom),
+with a read-only runtime mode. New edits use `private_access.enforcement: "auto"`.
+With the node's egress guard enabled, execution uses both core rules and nft
+socket grants. With it disabled, execution requires both independent core
+address/DNS enforcement and the administrator's explicit
+`private_access.allow_core_only: true` acknowledgement. Disabling the guard alone
+never authorizes a weaker policy. The stored automatic intent is preserved; each
+apply re-evaluates the actual runtime, and re-enabling the guard restores dual
+protection. Legacy omitted/`"dual"` policies keep their existing behavior; the
+explicit `"core_only"` API value remains supported.
+
+Adapter features (`private_access_policy.scoped` and `independent_dns`) are
+reported independently of runtime readiness. Readiness reports the guard-derived
+mode and environmental prerequisites separately. The existing capability flags
+retain their runtime meaning for older panels. Missing/stale capabilities cannot
+authorize new automatic policies.
+
+Core-only currently supports sing-box / sing-box Extended with direct exits.
+Configure `cores.egress_guard: false` explicitly and restart bosun if this behavior
+is wanted; the panel does not change the node configuration. Retain the non-root
+proxy account and root-only control API guard. This removes nft **destination
+isolation**, not all nft requirements or control API protection. Global
+`cores.egress_allow` exceptions remain incompatible. Installer defaults are
+unchanged.
+
+Core-only rules resolve the destination before authorization, reject any DNS
+answer containing an unauthorized private address for that inbound/transport/
+port, and dial the same resolved address list. Loopback, link-local and metadata
+remain denied. Mixed allowed/disallowed DNS answers are deliberately rejected as
+a whole. Rules preserve normal direct routing choices; no nft private grants are
+created. Socket marks are only needed for traffic shaping in this mode.
+
+The pinned Xray version cannot guarantee that routing and final dialing use the
+same DNS result, so Xray is not advertised as supporting this mode. Managed
+VLESS/WireGuard reverse tunnels, proxy chains, WARP, balancers and policy-changing
+overrides are also unsupported. Existing dual-layer Xray support is unchanged.
+Changing or revoking a policy stops the old proxy connections before applying the
+new policy. A node downgrade or missing capability report prevents delivery of
+core-only grants rather than silently ignoring the new field.

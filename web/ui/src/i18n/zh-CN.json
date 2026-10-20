@@ -268,7 +268,11 @@
         "unknown": "无法识别此内核，请选择兼容内核。",
         "privateAccess": "私网访问需要支持此功能的节点、内核及最近的能力上报。",
         "listenAddress": "此 Mieru 构建不能绑定指定监听 IP，请使用 mita。",
-        "wireguardReverse": "反向 WireGuard 需要支持此功能的 Linux 节点和 Xray 内核上报最新能力。"
+        "wireguardReverse": "反向 WireGuard 需要支持此功能的 Linux 节点和 Xray 内核上报最新能力。",
+        "privateAccessCoreOnly": "仅内核策略需要支持的 sing-box 节点、已关闭的出站防护及新鲜上报；暂不支持 Xray 或托管反向隧道。",
+        "privateAccessPolicyUnknown": "自动策略需要节点上报独立的内核能力及新鲜运行状态，请升级节点后重新检查。",
+        "privateAccessRuntime": "运行前提尚未满足，请查看节点就绪检查中的具体原因。",
+        "privateAccessConfirmation": "请先确认同意在仅内核防护下授权此入站，再保存。"
       }
     }
   },
@@ -979,7 +983,15 @@
     "portEnd": "结束端口",
     "portsHint": "均为 0：全部端口；结束端口为 0：仅起始端口。",
     "add": "添加规则",
-    "remove": "删除规则"
+    "remove": "删除规则",
+    "enforcement": "防护方式",
+    "dual": "双层防护（默认）",
+    "coreOnly": "仅内核策略",
+    "enforcementHint": "仅内核策略要求显式关闭 cores.egress_guard，并有新鲜的节点能力上报。",
+    "coreOnlyHint": "仅支持 sing-box／Extended 直连出站。不使用 nft 目的地址隔离，仍要求非 root 账户和控制 API 保护。不支持 Xray、托管反向隧道或代理链。修改策略会中断连接。",
+    "actualMode": "实际防护方式",
+    "runtimeUnknown": "运行状态未知",
+    "confirmCoreOnly": "我理解当前未启用 nft 目的地址隔离，同意此入站在仅内核防护下授权私网访问。"
   },
   "coreManager": {
     "title": "内核管理",

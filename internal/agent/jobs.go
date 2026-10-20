@@ -8,6 +8,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/hostmanage"
 	"github.com/zeptop-dev/bosun/internal/netdiag"
 	"github.com/zeptop-dev/bosun/internal/panel"
+	"github.com/zeptop-dev/bosun/internal/privatecheck"
 	"github.com/zeptop-dev/bosun/internal/realityscan"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
@@ -117,6 +118,10 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		}
 		out.Result, _ = json.Marshal(a.CoreInventory())
 
+	case spec.PrivateAccessCheckKind:
+		result := a.privateAccessReadiness()
+		privatecheck.Probe(ctx, result)
+		out.Result, _ = json.Marshal(result)
 	case spec.NetworkDiagnosticKind:
 		var p spec.DiagnosticParams
 		if err := json.Unmarshal(j.Params, &p); err != nil || p.Validate() != nil {

@@ -190,7 +190,9 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 				tags = append(tags, tag)
 			}
 		}
-		route["rules"] = append([]any{m{"inbound": tags, "action": "resolve", "server": server}}, route["rules"].([]any)...)
+		// Resolve after sniffing and before authorization, using the same
+		// destination-address list consumed by the direct dialer.
+		route["rules"] = append(sniffRules(inbounds), append([]any{m{"inbound": tags, "action": "resolve", "server": server}}, rules...)...)
 	}
 	if err := core.ApplyOverride("singbox", cfg, node.Overrides[singboxDistribution(opt.Distribution)]); err != nil {
 		return nil, fmt.Errorf("sing-box: %w", err)

@@ -6,6 +6,8 @@ Merge commits and formatting-only commits are left out. Binaries and
 `SHA256SUMS` for every tag are on the GitHub Release; nodes update themselves
 from there (Settings → Backups and maintenance → Version and updates, or from Captain's node list).
 
+- **v0.74.0** (2026-10-20) — Separate scoped private-policy adapter features from runtime egress-guard readiness. Resolve automatic enforcement on every apply: dual protection with the guard enabled, or explicitly acknowledged core-only authorization on supported direct sing-box/Extended exits. Preserve CIDR/protocol/port scopes, reject mixed unauthorized DNS answers, bind dialing to the checked answers, and stop old connections on revocation. Keep non-root control API protection and reject unsupported Xray/reverse/proxy-chain combinations. Add read-only prerequisite reports/jobs, a non-root account preparation command, and NET_ADMIN in newly generated full-node Compose deployments; preserve existing configuration.
+
 - **v0.73.0** (2026-10-20) — Report the current OS hostname on every regular Captain report; omit failed reads.
 
 - **v0.72.0** (2026-10-19) — Protect firewall rule ownership with durable intent, tagged UFW rules and distinct firewalld rich rules; preserve manual and ambiguous legacy allowances. Reconcile shared listener references after forward changes and periodically retry drift/failures. Expose per-port sources and synchronization state through host inspection. Keep the updater floor at v0.72.0 to preserve the ownership ledger.

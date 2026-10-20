@@ -8,9 +8,16 @@ import (
 func (a *Agent) CoreCandidates() []spec.CoreCandidate {
 	out := a.reg.Candidates()
 	for i := range out {
+		if out[i].Capabilities.PrivateAccess {
+			out[i].Capabilities.PrivateAccessPolicy = &spec.PrivateAccessPolicyCapabilities{Scoped: true, IndependentDNS: out[i].Capabilities.CoreOnlyPrivateAccess}
+		}
+		out[i].Capabilities.CoreOnlyPrivateAccess = out[i].Capabilities.CoreOnlyPrivateAccess && a.coreOnlyPrivateAccessReady()
 		// Never advertise a transport that this installation cannot enforce.
 		out[i].Capabilities.WireGuardReverse = out[i].Capabilities.WireGuardReverse && a.wireGuardReady()
-		out[i].Capabilities.PrivateAccess = out[i].Capabilities.PrivateAccess && a.privateAccessReady()
+		if out[i].Capabilities.PrivateAccess {
+			out[i].Capabilities.PrivateAccessReadiness = a.privateAccessReadiness()
+			out[i].Capabilities.PrivateAccess = out[i].Capabilities.PrivateAccessReadiness.Ready
+		}
 	}
 	return out
 }

@@ -99,3 +99,30 @@ func TestPrivateAccessNotExportedInTemplates(t *testing.T) {
 		t.Fatal("template changed source inbound")
 	}
 }
+
+func TestAutomaticIntentDoesNotPersistRuntimeMode(t *testing.T) {
+	p := &PrivateAccess{Mode: "internal", Enforcement: "auto"}
+	n := &Node{Inbounds: []Inbound{{Tag: "auto", PrivateAccess: p}}}
+	if _, e := n.ResolvePrivateAccessIntent(true); e == nil {
+		t.Fatal("downgrade without consent")
+	}
+	dual, e := n.ResolvePrivateAccessIntent(false)
+	if e != nil || dual.Inbounds[0].PrivateAccess.Enforcement != "dual" {
+		t.Fatal(e)
+	}
+	p.AllowCoreOnly = true
+	weaker, e := n.ResolvePrivateAccessIntent(true)
+	if e != nil || !weaker.Inbounds[0].PrivateAccess.CoreOnly() {
+		t.Fatal(e)
+	}
+	if n.Inbounds[0].PrivateAccess.Enforcement != "auto" {
+		t.Fatal("stored intent mutated")
+	}
+	if _, e = n.PrivateGrants(nil); e == nil {
+		t.Fatal("unresolved intent compiled")
+	}
+	dual, e = n.ResolvePrivateAccessIntent(false)
+	if e != nil || dual.Inbounds[0].PrivateAccess.CoreOnly() {
+		t.Fatal("guard re-enable left stale core-only mode", e)
+	}
+}

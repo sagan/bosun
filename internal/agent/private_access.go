@@ -6,15 +6,26 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/zeptop-dev/bosun/internal/privatecheck"
 	"github.com/zeptop-dev/bosun/internal/runas"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
-func (a *Agent) privateAccessReady() bool {
+func (a *Agent) privateAccessReadiness() *spec.PrivateAccessReadiness {
 	uid, _ := runas.IDs()
-	return uid > 0 && a.Egress != nil && a.Egress.Supported() && !a.EgressDisabled && len(a.EgressAllow) == 0
+	return privatecheck.Check(uid, a.Egress != nil && a.Egress.Supported(), a.EgressDisabled, len(a.EgressAllow), a.Egress != nil && a.Egress.Run != nil)
 }
+func (a *Agent) coreOnlyPrivateAccessReady() bool {
+	r := a.privateAccessReadiness()
+	for _, check := range r.Checks {
+		if check.ID != "guard" && !check.OK {
+			return false
+		}
+	}
+	return a.EgressDisabled
+}
+func (a *Agent) privateAccessReady() bool { return a.privateAccessReadiness().Ready }
 
 func (a *Agent) stopPrivateCores(ctx context.Context) error {
 	var errs []error
@@ -50,8 +61,8 @@ func (a *Agent) preparePrivateAccess(ctx context.Context, node *spec.Node, limit
 		return nil
 	}
 	grants, err := node.PrivateGrants(a.users)
-	if err == nil && active && !a.privateAccessReady() {
-		err = fmt.Errorf("private access requires Linux nft, a non-root core account and enabled egress guard without global CIDR exceptions")
+	if err == nil && ((node.HasDualPrivateAccess() && !a.privateAccessReady()) || (node.HasCoreOnlyPrivateAccess() && !a.coreOnlyPrivateAccessReady())) {
+		err = fmt.Errorf("private access prerequisites are not met: dual requires enabled egress guard; core_only requires explicitly disabled egress guard; both retain non-root control API protection and forbid global CIDR exceptions")
 	}
 	if err != nil {
 		return errors.Join(err, a.stopPrivateCores(ctx))

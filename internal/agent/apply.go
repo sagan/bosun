@@ -163,6 +163,11 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		return err
 	}
 
+	// Keep the stored automatic intent intact across guard changes/restarts.
+	desired, err := a.node.ResolvePrivateAccessIntent(a.EgressDisabled)
+	if err != nil {
+		return errors.Join(err, a.stopPrivateCores(ctx))
+	}
 	a.statusMu.Lock()
 	restart := a.forceRestart
 	a.forceRestart = false
@@ -174,7 +179,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		a.setStatus(func(s *Status) { s.Decoy = st })
 	}
 	inbounds := make([]spec.Inbound, 0, len(a.node.Inbounds))
-	for _, ib := range a.node.Inbounds {
+	for _, ib := range desired.Inbounds {
 		// The shared shape check: a panel may not push anything a core
 		// would choke on (bad tag, missing key, REALITY without dest...).
 		// Such an inbound is left out with the reason instead of breaking
@@ -213,7 +218,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 		assign[name] = kept
 	}
 	a.setStatus(func(s *Status) { s.Skipped = skipped })
-	node := a.node
+	node := desired
 	if resolved, err := a.resolveWARP(*node); err != nil {
 		return err
 	} else {
@@ -274,7 +279,7 @@ func (a *Agent) applyInner(ctx context.Context) error {
 	if err := a.prepareWireGuardShaping(ctx, node, limits); err != nil {
 		return err
 	}
-	if runas.SetNetAdmin(len(limits) > 0 || node.HasPrivateAccess()) && runas.Active() {
+	if runas.SetNetAdmin(len(limits) > 0 || node.HasDualPrivateAccess()) && runas.Active() {
 		a.log.Info("core capabilities changed, restarting cores", "net_admin", len(limits) > 0)
 		restart = true
 	}
@@ -597,7 +602,7 @@ func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) error {
 		if node.Decoy != nil && node.Decoy.Port > 0 {
 			ports = append(ports, node.Decoy.Port)
 		}
-		applyErr := a.Egress.Apply(ctx, uid, egressguard.Options{PrivateGrants: grants, Disabled: a.EgressDisabled, Upstreams: upstreams, Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts})
+		applyErr := a.Egress.Apply(ctx, uid, egressguard.Options{PrivateGrants: nftPrivateGrants(grants), Disabled: a.EgressDisabled, Upstreams: upstreams, Allow: allow, LoopbackPorts: ports, ProtectedPorts: a.EgressProtectedPorts})
 		if applyErr != nil {
 			a.log.Error("egress guard", "err", applyErr)
 		}
@@ -613,4 +618,15 @@ func (a *Agent) applyEgress(ctx context.Context, node *spec.Node) error {
 
 func coreWaitsForUsers(name string, ib spec.Inbound) bool {
 	return name == "mita" || name == "singbox-extended" && (ib.Protocol == spec.Mieru || ib.Protocol == spec.SSH)
+}
+
+// Core-only permissions are enforced by the renderer, never by nft grants.
+func nftPrivateGrants(grants []spec.PrivateGrant) []spec.PrivateGrant {
+	var out []spec.PrivateGrant
+	for _, g := range grants {
+		if !g.CoreOnly {
+			out = append(out, g)
+		}
+	}
+	return out
 }

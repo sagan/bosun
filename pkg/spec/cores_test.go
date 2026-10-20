@@ -95,3 +95,87 @@ func TestCoreProbeFeaturesAndExplicitValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestReadinessPreviewPreservesLegacyAndProtocolGates(t *testing.T) {
+	ib := Inbound{Protocol: VLESS, PrivateAccess: &PrivateAccess{Mode: "internal"}}
+	c := CoreCandidate{Name: "singbox", Capabilities: CapabilitiesForCore("singbox")}
+	legacy := PreviewCores(ib, []CoreCandidate{c})
+	if legacy.PrivateAccessReadiness != nil || legacy.AutoCore != "singbox" {
+		t.Fatal("legacy behavior changed")
+	}
+	c.Capabilities.PrivateAccess = false
+	c.Capabilities.PrivateAccessReadiness = &PrivateAccessReadiness{CheckedAt: 123, Checks: []PrivateAccessCheck{{ID: "user", OK: false}}}
+	p := PreviewCores(ib, []CoreCandidate{c})
+	if p.AutoCore != "" || p.PrivateAccessReadiness == nil || p.Options[0].Compatible {
+		t.Fatal("failed prerequisites selectable")
+	}
+	c.Capabilities.PrivateAccess = true
+	c.Capabilities.PrivateAccessReadiness.Ready = true
+	ib.Protocol = WireGuard
+	if PreviewCores(ib, []CoreCandidate{c}).AutoCore != "" {
+		t.Fatal("readiness bypassed protocol support")
+	}
+}
+
+func TestCoreOnlyPrivateAccessRequiresExplicitCapability(t *testing.T) {
+	ib := Inbound{Protocol: VLESS, PrivateAccess: &PrivateAccess{Mode: "internal", Enforcement: "core_only"}}
+	for _, name := range []string{"singbox", "singbox-extended"} {
+		c := CapabilitiesForCore(name)
+		c.PrivateAccess = false
+		if !c.Supports(ib) {
+			t.Fatal("core-only rejected by supported adapter", name)
+		}
+		c.CoreOnlyPrivateAccess = false
+		if c.UnsupportedReason(ib) != "privateAccessCoreOnly" {
+			t.Fatal("legacy capability bypassed")
+		}
+	}
+	if CapabilitiesForCore("xray").Supports(ib) {
+		t.Fatal("pinned Xray accepted core-only")
+	}
+	ib.PrivateAccess.Enforcement = ""
+	c := CapabilitiesForCore("singbox")
+	c.PrivateAccess = false
+	if c.Supports(ib) {
+		t.Fatal("default dual silently downgraded")
+	}
+}
+
+func TestAutomaticPrivateAccessConsentAndRuntime(t *testing.T) {
+	p := &PrivateAccess{Mode: "internal", Enforcement: "auto"}
+	ib := Inbound{Protocol: VLESS, PrivateAccess: p}
+	c := CapabilitiesForCore("singbox")
+	c.PrivateAccessPolicy = &PrivateAccessPolicyCapabilities{Scoped: true, IndependentDNS: true}
+	c.PrivateAccessReadiness = &PrivateAccessReadiness{EffectiveMode: "core_only", Checks: []PrivateAccessCheck{{ID: "guard", OK: false}, {ID: "user", OK: true}}}
+	c.PrivateAccess = false
+	if got := c.UnsupportedReason(ib); got != "privateAccessConfirmation" {
+		t.Fatal(got)
+	}
+	p.AllowCoreOnly = true
+	if got := c.UnsupportedReason(ib); got != "" {
+		t.Fatal(got)
+	}
+	c.PrivateAccessReadiness.EffectiveMode = "dual"
+	c.PrivateAccess = true
+	c.CoreOnlyPrivateAccess = false
+	if got := c.UnsupportedReason(ib); got != "" {
+		t.Fatal("did not upgrade to dual", got)
+	}
+	resolved, err := ResolvePrivateAccess(p, false)
+	if err != nil || resolved.Enforcement != "dual" || p.Enforcement != "auto" {
+		t.Fatal("mutated stored intent")
+	}
+	c.PrivateAccessPolicy.IndependentDNS = false
+	c.PrivateAccessReadiness.EffectiveMode = "core_only"
+	if got := c.UnsupportedReason(ib); got != "privateAccessCoreOnly" {
+		t.Fatal("DNS limitation bypassed", got)
+	}
+	c.PrivateAccessReadiness = nil
+	if got := c.UnsupportedReason(ib); got != "privateAccessRuntime" {
+		t.Fatal("stale runtime accepted", got)
+	}
+	c.PrivateAccessPolicy = nil
+	if got := c.UnsupportedReason(ib); got != "privateAccessPolicyUnknown" {
+		t.Fatal("old node accepted automatic intent", got)
+	}
+}

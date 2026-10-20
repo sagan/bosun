@@ -10,18 +10,21 @@ import (
 // CoreCapabilities describes the features implemented by a bosun adapter,
 // rather than everything the upstream binary may support.
 type CoreCapabilities struct {
-	WireGuardReverse bool       `json:"wireguard_reverse,omitempty"`
-	PrivateAccess    bool       `json:"private_access,omitempty"`
-	VLESSReverse     bool       `json:"vless_reverse,omitempty"`
-	Protocols        []Protocol `json:"protocols"`
-	Transports       []string   `json:"transports,omitempty"`
-	Shadowsocks2022  bool       `json:"shadowsocks2022,omitempty"`
-	HotUserReload    bool       `json:"hot_user_reload,omitempty"`
-	Fallbacks        bool       `json:"fallbacks,omitempty"`
-	ProxyProtocol    bool       `json:"proxy_protocol,omitempty"`
-	SnellMultiUser   bool       `json:"snell_multi_user,omitempty"`
-	SnellObfsTLS     bool       `json:"snell_obfs_tls,omitempty"`
-	ShadowTLS        bool       `json:"shadow_tls,omitempty"`
+	PrivateAccessPolicy    *PrivateAccessPolicyCapabilities `json:"private_access_policy,omitempty"`
+	CoreOnlyPrivateAccess  bool                             `json:"core_only_private_access,omitempty"`
+	PrivateAccessReadiness *PrivateAccessReadiness          `json:"private_access_readiness,omitempty"`
+	WireGuardReverse       bool                             `json:"wireguard_reverse,omitempty"`
+	PrivateAccess          bool                             `json:"private_access,omitempty"`
+	VLESSReverse           bool                             `json:"vless_reverse,omitempty"`
+	Protocols              []Protocol                       `json:"protocols"`
+	Transports             []string                         `json:"transports,omitempty"`
+	Shadowsocks2022        bool                             `json:"shadowsocks2022,omitempty"`
+	HotUserReload          bool                             `json:"hot_user_reload,omitempty"`
+	Fallbacks              bool                             `json:"fallbacks,omitempty"`
+	ProxyProtocol          bool                             `json:"proxy_protocol,omitempty"`
+	SnellMultiUser         bool                             `json:"snell_multi_user,omitempty"`
+	SnellObfsTLS           bool                             `json:"snell_obfs_tls,omitempty"`
+	ShadowTLS              bool                             `json:"shadow_tls,omitempty"`
 	// MieruWildcardOnly marks embedded versions without listen IP support.
 	MieruWildcardOnly bool `json:"mieru_wildcard_only,omitempty"`
 }
@@ -31,12 +34,37 @@ func (c CoreCapabilities) Supports(ib Inbound) bool { return c.UnsupportedReason
 // UnsupportedReason is a stable, translatable reason code. Shape validation
 // (keys, addresses, required TLS, etc.) remains Inbound.Validate's job.
 func (c CoreCapabilities) UnsupportedReason(ib Inbound) string {
+	if ib.PrivateAccess.Enabled() && ib.PrivateAccess.Enforcement == "auto" {
+		if c.PrivateAccessPolicy == nil || !c.PrivateAccessPolicy.Scoped {
+			return "privateAccessPolicyUnknown"
+		}
+		r := c.PrivateAccessReadiness
+		if r == nil || (r.EffectiveMode != "dual" && r.EffectiveMode != "core_only") {
+			return "privateAccessRuntime"
+		}
+		if r.EffectiveMode == "core_only" && !c.PrivateAccessPolicy.IndependentDNS {
+			return "privateAccessCoreOnly"
+		}
+		for _, check := range r.Checks {
+			if check.ID != "guard" && !check.OK {
+				return "privateAccessRuntime"
+			}
+		}
+		p, err := ResolvePrivateAccess(ib.PrivateAccess, r.EffectiveMode == "core_only")
+		if err != nil {
+			return "privateAccessConfirmation"
+		}
+		ib.PrivateAccess = p
+	}
+
 	switch {
 	case ib.WireGuardSlot != 0 && !c.WireGuardReverse:
 		return "wireguardReverse"
 	case ib.Protocol == Mieru && c.MieruWildcardOnly && ib.Listen != "" && ib.Listen != "::" && ib.Listen != "0.0.0.0":
 		return "listenAddress"
-	case ib.PrivateAccess.Enabled() && (!c.PrivateAccess || ib.Protocol == WireGuard || (ib.Protocol == Snell && !ib.SnellMultiUser) || (c.VLESSReverse && (ib.Protocol == SOCKS || ib.Protocol == HTTP))):
+	case ib.PrivateAccess.CoreOnly() && (!c.CoreOnlyPrivateAccess || ib.Reverse != nil || ib.WireGuardSlot != 0):
+		return "privateAccessCoreOnly"
+	case ib.PrivateAccess.Enabled() && ((!ib.PrivateAccess.CoreOnly() && !c.PrivateAccess) || ib.Protocol == WireGuard || (ib.Protocol == Snell && !ib.SnellMultiUser) || (c.VLESSReverse && (ib.Protocol == SOCKS || ib.Protocol == HTTP))):
 		return "privateAccess"
 	case ib.Reverse != nil && (!c.VLESSReverse || (!ib.Reverse.Receiver && (ib.Protocol == WireGuard || ib.Protocol == SOCKS || ib.Protocol == HTTP))):
 		return "reverse"
@@ -70,12 +98,12 @@ type CoreCandidate struct {
 // values so a registry/test cannot mutate the shared catalog.
 func CoreCatalog() []CoreCandidate {
 	return []CoreCandidate{
-		{"singbox", CoreCapabilities{PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
+		{"singbox", CoreCapabilities{CoreOnlyPrivateAccess: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
 		{"xray", CoreCapabilities{WireGuardReverse: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP, WireGuard}, Transports: []string{"ws", "grpc", "httpupgrade", "xhttp"}, HotUserReload: true, Fallbacks: true, ProxyProtocol: true, VLESSReverse: true}},
 		{"mita", CoreCapabilities{Protocols: []Protocol{Mieru}, HotUserReload: true}},
 		{"hysteria", CoreCapabilities{Protocols: []Protocol{Hysteria2}, HotUserReload: true}},
 		{"snell", CoreCapabilities{Protocols: []Protocol{Snell}, SnellObfsTLS: true}},
-		{"singbox-extended", CoreCapabilities{MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
+		{"singbox-extended", CoreCapabilities{CoreOnlyPrivateAccess: true, MieruWildcardOnly: true, PrivateAccess: true, Protocols: []Protocol{VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, AnyTLS, SOCKS, HTTP, Naive, Snell, Mieru, SSH}, Transports: []string{"ws", "grpc", "httpupgrade", "http"}, Shadowsocks2022: true, SnellMultiUser: true, ShadowTLS: true}},
 	}
 }
 
@@ -125,15 +153,17 @@ func SelectCore(ib Inbound, enabled []CoreCandidate) (string, error) {
 }
 
 type CoreOption struct {
-	Name       string `json:"name"`
-	Compatible bool   `json:"compatible"`
-	Reason     string `json:"reason,omitempty"`
-	Available  *bool  `json:"available"` // nil means the node has not advertised capabilities
+	PrivateAccessPolicy *PrivateAccessPolicyCapabilities `json:"private_access_policy,omitempty"`
+	Name                string                           `json:"name"`
+	Compatible          bool                             `json:"compatible"`
+	Reason              string                           `json:"reason,omitempty"`
+	Available           *bool                            `json:"available"` // nil means the node has not advertised capabilities
 }
 type CoreOptions struct {
-	Options        []CoreOption `json:"options"`
-	InventoryKnown bool         `json:"inventory_known"`
-	AutoCore       string       `json:"auto_core"`
+	Options                []CoreOption            `json:"options"`
+	InventoryKnown         bool                    `json:"inventory_known"`
+	AutoCore               string                  `json:"auto_core"`
+	PrivateAccessReadiness *PrivateAccessReadiness `json:"private_access_readiness,omitempty"`
 }
 
 // PreviewCores keeps unsupported choices in the API for explaining an existing
@@ -143,6 +173,9 @@ func PreviewCores(ib Inbound, inventory []CoreCandidate) CoreOptions {
 	out := CoreOptions{Options: []CoreOption{}, InventoryKnown: inventory != nil}
 	catalog := CoreCatalog()
 	for _, c := range inventory {
+		if c.Capabilities.PrivateAccessReadiness != nil {
+			out.PrivateAccessReadiness = c.Capabilities.PrivateAccessReadiness
+		}
 		i := slices.IndexFunc(catalog, func(x CoreCandidate) bool { return x.Name == c.Name })
 		if i >= 0 {
 			catalog[i] = c
@@ -152,7 +185,7 @@ func PreviewCores(ib Inbound, inventory []CoreCandidate) CoreOptions {
 	}
 	for _, c := range catalog {
 		reason := c.Capabilities.UnsupportedReason(ib)
-		opt := CoreOption{Name: c.Name, Compatible: reason == "", Reason: reason}
+		opt := CoreOption{PrivateAccessPolicy: c.Capabilities.PrivateAccessPolicy, Name: c.Name, Compatible: reason == "", Reason: reason}
 		if inventory != nil {
 			enabled := slices.ContainsFunc(inventory, func(x CoreCandidate) bool { return x.Name == c.Name })
 			opt.Available = &enabled
@@ -178,6 +211,10 @@ func CoreProbe(q url.Values) Inbound {
 	}
 	if q.Get("private_access") == "true" {
 		ib.PrivateAccess = &PrivateAccess{Mode: "internal"}
+		if e := q.Get("private_enforcement"); e == "core_only" || e == "auto" {
+			ib.PrivateAccess.Enforcement = e
+		}
+		ib.PrivateAccess.AllowCoreOnly = q.Get("allow_core_only") == "true"
 	}
 	if q.Get("reverse") == "true" {
 		ib.Reverse = &ReverseInbound{ID: "preview"}

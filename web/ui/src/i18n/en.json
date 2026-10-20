@@ -268,7 +268,11 @@
         "unknown": "This core is not recognized. Choose a compatible core.",
         "privateAccess": "Private access requires a recent capability report from a supported node and core.",
         "listenAddress": "This Mieru build cannot bind a specific listening IP. Use mita.",
-        "wireguardReverse": "Reverse WireGuard requires a fresh capability report from a supported Linux node and Xray core."
+        "wireguardReverse": "Reverse WireGuard requires a fresh capability report from a supported Linux node and Xray core.",
+        "privateAccessCoreOnly": "Core-only needs a supported sing-box node, disabled egress guard and a fresh capability report; Xray and managed reverse tunnels are unsupported.",
+        "privateAccessPolicyUnknown": "Automatic policy requires a fresh node report with separate policy capabilities.",
+        "privateAccessRuntime": "The runtime prerequisites are not satisfied. Check the node readiness details.",
+        "privateAccessConfirmation": "Confirm authorization under core-only protection before saving."
       }
     }
   },
@@ -979,7 +983,15 @@
     "portEnd": "Last port",
     "portsHint": "Both 0: all ports. Last port 0: first port only.",
     "add": "Add rule",
-    "remove": "Remove rule"
+    "remove": "Remove rule",
+    "enforcement": "Protection mode",
+    "dual": "Dual protection (default)",
+    "coreOnly": "Core policy only",
+    "enforcementHint": "Core-only requires explicitly disabled cores.egress_guard and a current capability report.",
+    "coreOnlyHint": "Only sing-box / Extended with direct exits. No nft destination isolation; non-root and control API protection remain required. Xray, managed reverse tunnels and proxy chains are unsupported. Changing policy interrupts connections.",
+    "actualMode": "Effective protection",
+    "runtimeUnknown": "Runtime unknown",
+    "confirmCoreOnly": "I understand nft destination isolation is disabled and authorize this inbound to use core-only protection."
   },
   "coreManager": {
     "title": "Core management",

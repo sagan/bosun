@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"os/user"
+	"strings"
 	"testing"
 
 	"github.com/zeptop-dev/bosun/internal/core"
@@ -13,6 +14,12 @@ import (
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
+
+type privateFeatureCore struct{ *fakeCore }
+
+func (f *privateFeatureCore) Capabilities() core.Capabilities {
+	return spec.CapabilitiesForCore(f.name)
+}
 
 func TestPrivateAccessApplyFailClosedAndRevocation(t *testing.T) {
 	account, e := user.Current()
@@ -31,7 +38,7 @@ func TestPrivateAccessApplyFailClosedAndRevocation(t *testing.T) {
 	t.Cleanup(runas.Clear)
 	c := &fakeCore{name: "xray", protos: []spec.Protocol{spec.VLESS}, running: true}
 	reg := core.NewRegistry()
-	reg.Register(c)
+	reg.Register(&privateFeatureCore{c})
 	fail := false
 	applies := 0
 	a := &Agent{reg: reg, log: slog.Default(), users: []spec.User{{ID: 1, Name: "u"}}, driver: nopDriver{}}
@@ -70,9 +77,18 @@ func TestPrivateAccessApplyFailClosedAndRevocation(t *testing.T) {
 	if err := a.preparePrivateAccess(context.Background(), n, nil); err != nil || c.running || a.privatePolicyActive {
 		t.Fatal("revoke failed", err)
 	}
-	// Root/disabled/broad bypass must never advertise enforcement.
+	// Adapter features remain independent of guard state; the legacy runtime
+	// availability flag continues to fail closed.
+	before := a.CoreCandidates()[0].Capabilities
 	a.EgressDisabled = true
-	if a.CoreCandidates()[0].Capabilities.PrivateAccess {
+	after := a.CoreCandidates()[0].Capabilities
+	if before.PrivateAccessPolicy == nil || after.PrivateAccessPolicy == nil || *before.PrivateAccessPolicy != *after.PrivateAccessPolicy {
+		t.Fatal("guard state changed adapter features")
+	}
+	if after.PrivateAccessReadiness.EffectiveMode != "core_only" || before.PrivateAccessReadiness.EffectiveMode != "dual" {
+		t.Fatal("runtime mode did not track actual guard state")
+	}
+	if after.PrivateAccess {
 		t.Fatal("disabled guard advertised")
 	}
 }
@@ -112,5 +128,56 @@ func TestPrivateAccessRestartClearsOldGrantsBeforeCoreStart(t *testing.T) {
 	}
 	if !touched {
 		t.Fatal("empty first policy left old grants installed")
+	}
+}
+
+func TestCoreOnlyExplicitGateAndRevocation(t *testing.T) {
+	account, e := user.Current()
+	if e != nil {
+		t.Fatal(e)
+	}
+	if account.Uid == "0" {
+		account, e = user.LookupId("65534")
+		if e != nil {
+			t.Skip("no fixture account")
+		}
+	}
+	if e = runas.Set(account.Username); e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(runas.Clear)
+	c := &fakeCore{name: "singbox", protos: []spec.Protocol{spec.VLESS}, running: true}
+	reg := core.NewRegistry()
+	reg.Register(c)
+	a := &Agent{reg: reg, log: slog.Default(), driver: nopDriver{}, EgressDisabled: true}
+	a.Egress = &egressguard.Guard{Run: func(_ context.Context, script, _ string, _ ...string) ([]byte, error) {
+		if strings.Contains(script, "meta mark") {
+			t.Fatal("core-only emitted nft grant")
+		}
+		return nil, nil
+	}}
+	policy := &spec.PrivateAccess{Mode: "internal", Enforcement: "core_only"}
+	n := &spec.Node{Inbounds: []spec.Inbound{{Tag: "private", Protocol: spec.VLESS, PrivateAccess: policy}}}
+	if !a.coreOnlyPrivateAccessReady() || a.privateAccessReady() {
+		t.Fatal("mode gate wrong")
+	}
+	if e = a.preparePrivateAccess(context.Background(), n, nil); e != nil {
+		t.Fatal(e)
+	}
+	if c.running {
+		t.Fatal("old sockets survived policy change")
+	}
+	c.running = true
+	if e = a.preparePrivateAccess(context.Background(), n, nil); e != nil || !c.running {
+		t.Fatal("stable policy restarted core", e)
+	}
+	policy.Mode = "off"
+	policy.Enforcement = ""
+	if e = a.preparePrivateAccess(context.Background(), n, nil); e != nil || c.running {
+		t.Fatal("revocation failed", e)
+	}
+	a.EgressDisabled = false
+	if a.coreOnlyPrivateAccessReady() {
+		t.Fatal("core-only ignored system guard")
 	}
 }

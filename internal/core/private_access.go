@@ -17,6 +17,11 @@ import (
 // places these rules before the ordinary private-destination rejection, but
 // after managed transit routing and audit blocks.
 func PrivateRoutes(kind string, node *spec.Node, inbounds []spec.Inbound, users []spec.User, normal, outbounds []any, final string) ([]any, []any, error) {
+	for _, ib := range inbounds {
+		if kind != "singbox" && ib.PrivateAccess.CoreOnly() {
+			return nil, nil, fmt.Errorf("core-only private access requires sing-box; the pinned Xray cannot bind routing DNS results to the final dial")
+		}
+	}
 	grants, err := node.PrivateGrants(users)
 	if err != nil {
 		return nil, nil, err
@@ -94,7 +99,9 @@ func PrivateRoutes(kind string, node *spec.Node, inbounds []spec.Inbound, users 
 						clone := copyMap(base)
 						clone["tag"] = cloneTag
 						if kind == "singbox" {
-							clone["routing_mark"] = grant.Mark
+							if grant.Mark != 0 {
+								clone["routing_mark"] = grant.Mark
+							}
 						} else {
 							settings, _ := clone["settings"].(map[string]any)
 							if settings == nil {
@@ -195,6 +202,13 @@ func PrivateRoutes(kind string, node *spec.Node, inbounds []spec.Inbound, users 
 			}
 			result = append([]any{rule}, result...)
 		}
+	}
+	if kind == "singbox" {
+		rejects, err := CoreOnlyRejects(inbounds)
+		if err != nil {
+			return nil, nil, err
+		}
+		result = append(rejects, result...)
 	}
 	return result, extra, nil
 }

@@ -175,8 +175,17 @@ func (i Inbound) Validate() error {
 	// Unknown names remain forward-compatible with future adapters.
 	if i.Core != "" {
 		caps := CapabilitiesForCore(i.Core)
-		if len(caps.Protocols) > 0 && !caps.Supports(i) {
-			return fmt.Errorf("core %q does not support this inbound (%s)", i.Core, caps.UnsupportedReason(i))
+		// Static validation checks adapter shape only. Automatic enforcement is
+		// resolved separately using fresh runtime capabilities before persistence
+		// and again by the agent before applying the configuration.
+		shape := i
+		if i.PrivateAccess.Enabled() && i.PrivateAccess.Enforcement == "auto" {
+			p := *i.PrivateAccess
+			p.Enforcement = "dual"
+			shape.PrivateAccess = &p
+		}
+		if len(caps.Protocols) > 0 && !caps.Supports(shape) {
+			return fmt.Errorf("core %q does not support this inbound (%s)", i.Core, caps.UnsupportedReason(shape))
 		}
 	}
 

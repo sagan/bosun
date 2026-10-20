@@ -268,7 +268,11 @@
         "unknown": "不明なコアです。対応するコアを選択してください。",
         "privateAccess": "対応ノード・コアからの最新の機能報告が必要です。",
         "listenAddress": "この Mieru ビルドは特定の IP にバインドできません。mita を使用してください。",
-        "wireguardReverse": "リバース WireGuard には、対応 Linux ノードと Xray コアからの最新の機能レポートが必要です。"
+        "wireguardReverse": "リバース WireGuard には、対応 Linux ノードと Xray コアからの最新の機能レポートが必要です。",
+        "privateAccessCoreOnly": "対応する sing-box、無効な送信保護、新しい報告が必要です。Xray と管理リバーストンネルは非対応です。",
+        "privateAccessPolicyUnknown": "自動ポリシーには独立した能力と新しい実行状態の報告が必要です。",
+        "privateAccessRuntime": "実行条件が満たされていません。ノードの準備状況を確認してください。",
+        "privateAccessConfirmation": "保存前にコアのみの保護による承認を確認してください。"
       }
     }
   },
@@ -979,7 +983,15 @@
     "portEnd": "終了ポート",
     "portsHint": "両方 0：全ポート。終了が 0：開始ポートのみ。",
     "add": "ルールを追加",
-    "remove": "ルールを削除"
+    "remove": "ルールを削除",
+    "enforcement": "保護方式",
+    "dual": "二重保護（既定）",
+    "coreOnly": "コアポリシーのみ",
+    "enforcementHint": "cores.egress_guard の明示的な無効化と新しい能力報告が必要です。",
+    "coreOnlyHint": "sing-box / Extended の直接出口のみ対応。nft による宛先隔離は使用しませんが、非 root と制御 API 保護は必要です。Xray、管理リバーストンネル、プロキシチェーンは非対応。変更時は接続が中断されます。",
+    "actualMode": "実際の保護方式",
+    "runtimeUnknown": "実行状態不明",
+    "confirmCoreOnly": "nft による宛先隔離が無効であることを理解し、このインバウンドのコアのみの保護を承認します。"
   },
   "coreManager": {
     "title": "コア管理",

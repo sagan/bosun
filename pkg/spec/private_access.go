@@ -14,8 +14,10 @@ import (
 // control-plane/upstream access. An explicit off object also works with clients
 // which preserve omitted fields during updates.
 type PrivateAccess struct {
-	Mode  string              `json:"mode"` // off, internal (RFC1918 + ULA), custom
-	Rules []PrivateAccessRule `json:"rules,omitempty"`
+	AllowCoreOnly bool                `json:"allow_core_only,omitempty"` // administrator acknowledgement for automatic fallback
+	Enforcement   string              `json:"enforcement,omitempty"`     // auto (runtime-derived), empty/dual and core_only (legacy explicit mode)
+	Mode          string              `json:"mode"`                      // off, internal (RFC1918 + ULA), custom
+	Rules         []PrivateAccessRule `json:"rules,omitempty"`
 }
 
 type PrivateAccessRule struct {
@@ -29,6 +31,29 @@ type PrivateAccessRule struct {
 var PrivateAccessProtectedRanges = []string{"100.100.100.200/32", "fd00:ec2::254/128"}
 
 var internalAccessRanges = []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"}
+
+func (p *PrivateAccess) CoreOnly() bool { return p.Enabled() && p.Enforcement == "core_only" }
+func (n *Node) HasCoreOnlyPrivateAccess() bool {
+	for _, ib := range n.Inbounds {
+		if ib.PrivateAccess.CoreOnly() {
+			return true
+		}
+	}
+	return false
+}
+func (n *Node) HasDualPrivateAccess() bool {
+	for _, ib := range n.Inbounds {
+		if ib.PrivateAccess.Enabled() && !ib.PrivateAccess.CoreOnly() {
+			return true
+		}
+	}
+	for _, c := range n.ReverseClients {
+		if c.PrivateAccess.Enabled() {
+			return true
+		}
+	}
+	return false
+}
 
 func (p *PrivateAccess) Enabled() bool { return p != nil && p.Mode != "off" }
 
@@ -50,6 +75,12 @@ func (r PrivateAccessRule) Prefix() (netip.Prefix, error) {
 func (p *PrivateAccess) Validate() error {
 	if p == nil {
 		return nil
+	}
+	if p.Enforcement != "" && p.Enforcement != "dual" && p.Enforcement != "core_only" && p.Enforcement != "auto" {
+		return fmt.Errorf("private access enforcement must be auto, dual or core_only")
+	}
+	if p.Mode == "off" && p.Enforcement == "core_only" {
+		return fmt.Errorf("core_only requires an enabled private access policy")
 	}
 	switch p.Mode {
 	case "off", "internal":
@@ -118,6 +149,7 @@ func (p *PrivateAccess) EffectiveRules() []PrivateAccessRule {
 // PrivateGrant is a compiled socket identity, not a stored/wire configuration.
 // A limited user's additional marks map to their existing tc class.
 type PrivateGrant struct {
+	CoreOnly bool `json:"core_only,omitempty"`
 	Inbound  string
 	UserID   int64
 	UserName string
@@ -144,11 +176,17 @@ func (n *Node) HasPrivateAccess() bool {
 // uncontrolled remote exit, and raw overrides can erase managed routes/marks.
 func (n *Node) ValidatePrivateAccessNode() error {
 	for _, ib := range n.Inbounds {
+		if ib.PrivateAccess.Enabled() && (ib.PrivateAccess.CoreOnly() || ib.PrivateAccess.Enforcement == "auto") && (ib.Reverse != nil || ib.WireGuardSlot != 0) {
+			return fmt.Errorf("core-only private access does not support managed reverse tunnels")
+		}
 		if err := ib.PrivateAccess.Validate(); err != nil {
 			return err
 		}
 	}
 	for _, c := range n.ReverseClients {
+		if c.PrivateAccess.CoreOnly() || c.PrivateAccess.Enabled() && c.PrivateAccess.Enforcement == "auto" {
+			return fmt.Errorf("core-only private access does not support reverse exits")
+		}
 		if err := c.PrivateAccess.Validate(); err != nil {
 			return err
 		}
@@ -212,6 +250,9 @@ func (n *Node) PrivateGrants(users []User) ([]PrivateGrant, error) {
 	}
 	var grants []PrivateGrant
 	for _, ib := range n.Inbounds {
+		if ib.PrivateAccess.Enabled() && ib.PrivateAccess.Enforcement == "auto" {
+			return nil, fmt.Errorf("automatic private policy must be resolved against the runtime before compilation")
+		}
 		if !ib.PrivateAccess.Enabled() || ib.Reverse != nil {
 			continue
 		} // A must always tunnel to B
@@ -221,10 +262,10 @@ func (n *Node) PrivateGrants(users []User) ([]PrivateGrant, error) {
 		}
 		for _, u := range ib.EffectiveUsers(users) {
 			if n.EffectiveSpeedLimit(u) > 0 {
-				grants = append(grants, PrivateGrant{Inbound: tag, UserID: u.ID, UserName: privateAuthName(ib, u), Rules: ib.PrivateAccess.EffectiveRules()})
+				grants = append(grants, PrivateGrant{CoreOnly: ib.PrivateAccess.CoreOnly(), Inbound: tag, UserID: u.ID, UserName: privateAuthName(ib, u), Rules: ib.PrivateAccess.EffectiveRules()})
 			}
 		}
-		grants = append(grants, PrivateGrant{Inbound: tag, Rules: ib.PrivateAccess.EffectiveRules()})
+		grants = append(grants, PrivateGrant{CoreOnly: ib.PrivateAccess.CoreOnly(), Inbound: tag, Rules: ib.PrivateAccess.EffectiveRules()})
 	}
 	for _, c := range n.ReverseClients {
 		if c.PrivateAccess.Enabled() {
@@ -245,6 +286,9 @@ func (n *Node) PrivateGrants(users []User) ([]PrivateGrant, error) {
 		used[SpeedMark(u.ID)] = true
 	}
 	for i := range grants {
+		if grants[i].CoreOnly && grants[i].UserID == 0 {
+			continue
+		}
 		b, _ := json.Marshal(grants[i])
 		h := sha256.Sum256(b)
 		mark := int64(binary.BigEndian.Uint32(h[:4])&0x3fffffff) + 0x40000000
@@ -263,4 +307,34 @@ func privateAuthName(ib Inbound, u User) string {
 		return u.Name
 	}
 	return InboundAuthName(ib, u)
+}
+
+// ResolvePrivateAccess derives execution from the actual guard state. It never
+// mutates stored intent: a restart must reconsider the environment each time.
+func ResolvePrivateAccess(p *PrivateAccess, guardDisabled bool) (*PrivateAccess, error) {
+	if !p.Enabled() || p.Enforcement != "auto" {
+		return p, nil
+	}
+	cp := *p
+	cp.Enforcement = "dual"
+	if guardDisabled {
+		if !p.AllowCoreOnly {
+			return nil, fmt.Errorf("privateAccessConfirmation")
+		}
+		cp.Enforcement = "core_only"
+	}
+	return &cp, nil
+}
+
+func (n *Node) ResolvePrivateAccessIntent(guardDisabled bool) (*Node, error) {
+	cp := *n
+	cp.Inbounds = append([]Inbound(nil), n.Inbounds...)
+	for i := range cp.Inbounds {
+		p, err := ResolvePrivateAccess(cp.Inbounds[i].PrivateAccess, guardDisabled)
+		if err != nil {
+			return nil, err
+		}
+		cp.Inbounds[i].PrivateAccess = p
+	}
+	return &cp, nil
 }

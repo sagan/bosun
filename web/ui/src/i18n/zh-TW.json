@@ -268,7 +268,11 @@
         "unknown": "無法識別此核心，請選擇相容核心。",
         "privateAccess": "私網存取需要支援此功能的節點、核心及最近的能力回報。",
         "listenAddress": "此 Mieru 建置不能綁定指定監聽 IP，請使用 mita。",
-        "wireguardReverse": "反向 WireGuard 需要支援此功能的 Linux 節點和 Xray 核心回報最新能力。"
+        "wireguardReverse": "反向 WireGuard 需要支援此功能的 Linux 節點和 Xray 核心回報最新能力。",
+        "privateAccessCoreOnly": "需要支援的 sing-box 節點、已關閉的出站防護及近期報告；不支援 Xray 或託管反向隧道。",
+        "privateAccessPolicyUnknown": "自動策略需要獨立能力與近期狀態報告，請升級節點後重新檢查。",
+        "privateAccessRuntime": "執行前提未滿足，請查看節點就緒檢查。",
+        "privateAccessConfirmation": "請先確認同意僅由核心策略授權此入站，再儲存。"
       }
     }
   },
@@ -979,7 +983,15 @@
     "portEnd": "結束連接埠",
     "portsHint": "均為 0：全部連接埠；結束為 0：僅起始連接埠。",
     "add": "新增規則",
-    "remove": "刪除規則"
+    "remove": "刪除規則",
+    "enforcement": "防護方式",
+    "dual": "雙層防護（預設）",
+    "coreOnly": "僅核心策略",
+    "enforcementHint": "需要明確關閉 cores.egress_guard，並有近期能力報告。",
+    "coreOnlyHint": "僅支援 sing-box／Extended 直連出口。不使用 nft 目的位址隔離，仍需非 root 帳戶及控制 API 保護。不支援 Xray、託管反向隧道或代理鏈。修改會中斷連線。",
+    "actualMode": "實際防護方式",
+    "runtimeUnknown": "執行狀態未知",
+    "confirmCoreOnly": "我理解目前未啟用 nft 目的位址隔離，同意此入站僅由核心策略授權私網存取。"
   },
   "coreManager": {
     "title": "核心管理",

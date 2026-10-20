@@ -1,3 +1,4 @@
+import { normalizePrivateAccess } from '../lib/privateAccess'
 import { ActionIcon, Button, Card, Collapse, Group, JsonInput, NumberInput, Select, SimpleGrid, Stack, Switch, Text, TextInput, Tooltip, UnstyledButton } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { IconRefresh } from '@tabler/icons-react'
@@ -62,7 +63,7 @@ export function toValues(ib?: Inbound): Values {
     no_sniff: ib.no_sniff ?? false,
     wg_private: ib.wg_private_key ?? '', wg_public: ib.wg_public_key ?? '', wg_address: ib.wg_address || '10.66.0.1/16', wg_mtu: ib.wg_mtu || 1420,
     fallbacks: (ib.fallbacks ?? []).map((f) => ({ name: f.name ?? '', alpn: f.alpn ?? '', path: f.path ?? '', dest: f.dest, xver: f.xver ?? 0 })),
-    extra: JSON.stringify(extra, null, 2),
+    extra: JSON.stringify(normalizePrivateAccess(extra), null, 2),
   }
 }
 
@@ -412,7 +413,7 @@ export function InboundForm({ initial, onSubmit, busy, onCancel, ingresses = [],
 
         <Button variant="subtle" size="xs" onClick={() => setAdvanced((a) => !a)} style={{ alignSelf: 'flex-start' }}>{advanced ? t('inbounds.hideAdvanced') : t('inbounds.showAdvanced')}</Button>
         <Collapse in={advanced}>
-          <PrivateAccessFields json={v.extra} onChange={(s) => form.setFieldValue('extra', s)} />
+          <PrivateAccessFields runtimeMode={coreSelection.runtimeMode} json={v.extra} onChange={(s) => form.setFieldValue('extra', s)} />
           <Switch mb="sm" label={t('inbounds.noSniff')} description={t('inbounds.noSniffHint')} {...form.getInputProps('no_sniff', { type: 'checkbox' })} />
           <JsonInput label={t('inbounds.extra')} description={t('inbounds.extraHint')} autosize minRows={3} formatOnBlur {...form.getInputProps('extra')} />
         </Collapse>

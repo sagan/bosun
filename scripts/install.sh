@@ -272,12 +272,15 @@ if [ "$MODE" = docker ]; then
   docker compose version >/dev/null || { echo 'Docker Compose is required' >&2; exit 1; }
   mkdir -p /opt/bosun
   if [ ! -f /opt/bosun/docker-compose.yml ]; then
+    PRIVATE_CAPS=""
+    [ "$NODE_MODE" != full ] || PRIVATE_CAPS="    cap_add: [NET_ADMIN]"
     cat > /opt/bosun/docker-compose.yml <<YAML
 services:
   bosun:
     image: zeptop/bosun:$VERSION
     restart: unless-stopped
     network_mode: host
+${PRIVATE_CAPS}
     stop_grace_period: 60s
     volumes:
       - /etc/bosun/config.yaml:/etc/bosun/config.yaml:ro
@@ -291,10 +294,19 @@ YAML
   if [ "$FIRST_INSTALL" = 1 ] && [ -z "$CAPTAIN" ]; then
     docker compose run --rm --no-deps bosun admin set -user "$PANEL_USER" -password "$PANEL_PASS"
   fi
+  if [ "$NODE_MODE" != monitor ] && docker compose run --rm --no-deps bosun private-access-supported >/dev/null 2>&1; then
+    docker compose run --rm --no-deps bosun prepare-private-access || echo 'Private access needs attention; see the checks above.' >&2
+  fi
   docker compose up -d bosun
   if [ "$WEB_UPGRADE" = 1 ]; then "$TMP/bosun" docker-updater setup --dir /opt/bosun; fi
   echo 'bosun installed with Docker. Manage: cd /opt/bosun && docker compose logs -f'
   exit 0
+fi
+
+# Older pinned binaries may not implement preparation. Preserve existing
+# configs; the command creates only the configured non-root account.
+if [ "$NODE_MODE" != monitor ] && /usr/local/bin/bosun private-access-supported >/dev/null 2>&1; then
+  /usr/local/bin/bosun prepare-private-access -c /etc/bosun/config.yaml || echo 'Private access needs attention; see the checks above.' >&2
 fi
 
 # Seed the panel login before the first start so the password is known

@@ -4,6 +4,8 @@ services:
     image: zeptop/bosun:latest   # or ghcr.io/zeptop-dev/bosun:latest
     restart: unless-stopped
     network_mode: host
+    # Needed for nftables protection and per-inbound private access.
+    cap_add: [NET_ADMIN]
     volumes:
       - bosun-data:/var/lib/bosun
       # - ./config.yaml:/etc/bosun/config.yaml:ro   # optional override

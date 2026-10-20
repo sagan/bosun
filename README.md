@@ -1127,3 +1127,5 @@ Team Cymru/public-hop-only policy and conservative classification remain intact.
 ### Host management
 
 Captain node details expose observed host state, individual changes and operation history. Native root Debian/Ubuntu systemd nodes support bounded management jobs with independent local recovery for access/network changes. Other environments are read-only; missing system packages are not installed automatically.
+
+Captain-managed nodes report their current OS hostname on each regular report; Captain v1.26.0+ updates the hostname without changing the administrator-assigned node name.

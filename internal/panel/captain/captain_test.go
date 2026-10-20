@@ -110,9 +110,19 @@ func TestPairFetchReport(t *testing.T) {
 	if f.reports[0].Revision != "r1" || f.reports[0].Version != "test" || f.reports[0].Traffic[0].UserID != 1 {
 		t.Fatalf("report body: %+v", f.reports[0])
 	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.reports[0].Hostname != hostname {
+		t.Fatal("report omitted current hostname")
+	}
 	f.state.Revision = "r2"
-	if sc, _ := c.Report(ctx, agentproto.Report{}); !sc {
+	if sc, _ := c.Report(ctx, agentproto.Report{Hostname: "stale-example"}); !sc {
 		t.Fatal("report should flag state change")
+	}
+	if f.reports[1].Hostname != hostname {
+		t.Fatal("report did not refresh hostname")
 	}
 	if node, changed, _ := c.Node(ctx); !changed || node == nil {
 		t.Fatal("node should change after r2")

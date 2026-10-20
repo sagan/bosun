@@ -344,6 +344,7 @@ func (c *Client) Report(ctx context.Context, rep agentproto.Report) (bool, error
 	}
 	c.mu.Unlock()
 	rep.Version = c.cfg.Version
+	rep.Hostname, _ = os.Hostname()
 	code, body, _, err := c.do(ctx, http.MethodPost, "/api/agent/report", rep, nil)
 	if err != nil {
 		return false, err

@@ -260,7 +260,11 @@ func New(cfg *config.Config, driver panel.Driver, reg *core.Registry, mreg *metr
 func (a *Agent) Run(ctx context.Context) error {
 	defer a.stopAll()
 	if err := a.clearWireGuard(ctx); err != nil {
-		return fmt.Errorf("clear previous WireGuard state: %w", err)
+		var hostOnly *wireGuardForwardingCleanupError
+		if !errors.As(err, &hostOnly) {
+			return fmt.Errorf("clear previous WireGuard state: %w", err)
+		}
+		a.log.Error("WireGuard host-rule cleanup pending", "err", err)
 	}
 	if a.EgressDisabled && !a.MonitorOnly() {
 		a.applyEgress(ctx, &spec.Node{})

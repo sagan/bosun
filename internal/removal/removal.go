@@ -25,6 +25,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/hostmanage"
 	"github.com/zeptop-dev/bosun/internal/local"
 	"github.com/zeptop-dev/bosun/internal/shaper"
+	"github.com/zeptop-dev/bosun/internal/wgfirewall"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 	"gopkg.in/yaml.v3"
@@ -398,6 +399,9 @@ func execute(ctx context.Context, p Plan, run command, paths installation, clean
 
 func cleanNetwork(ctx context.Context, paths installation) error {
 	if err := hostmanage.Cleanup(ctx, paths.data); err != nil {
+		return err
+	}
+	if err := (&wgfirewall.Manager{StateFile: filepath.Join(paths.data, "wireguard-firewall.json")}).Apply(ctx, nil); err != nil {
 		return err
 	}
 	// These helpers know which qdisc/classes and firewall openings belong to

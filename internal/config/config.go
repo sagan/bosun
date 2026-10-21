@@ -83,6 +83,8 @@ type Config struct {
 	// FirewallAutoOpen lets bosun allow its own listening ports in ufw or
 	// firewalld when one is active (default true). Ports it opened are
 	// closed again when the inbound or forward goes away.
+	// Also controls host forwarding rules for reverse WG links that explicitly
+	// opt into AutoForwarding; existing links remain administrator-managed.
 	FirewallAutoOpen *bool `yaml:"firewall_auto_open"`
 }
 

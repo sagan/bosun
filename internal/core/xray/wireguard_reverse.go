@@ -36,7 +36,7 @@ func wireGuardRoutes(node *spec.Node, inbounds []spec.Inbound, users []spec.User
 		if !reflect.DeepEqual(ib.PrivateAccess.EffectiveRules(), c.PrivateAccess.EffectiveRules()) {
 			return nil, nil, fmt.Errorf("WireGuard inbound and link private grants must match")
 		}
-		add := func(v6 bool, user *spec.User) {
+		add := func(v6, matchFamily bool, user *spec.User) {
 			family, strategy := "v4", "UseIPv4"
 			if v6 {
 				family, strategy = "v6", "UseIPv6"
@@ -44,8 +44,12 @@ func wireGuardRoutes(node *spec.Node, inbounds []spec.Inbound, users []spec.User
 			tag := fmt.Sprintf("wireguard-%d-%s", c.Slot, family)
 			out := m{"protocol": "freedom", "sendThrough": c.Address(false, v6), "settings": m{"domainStrategy": strategy}}
 			rule := m{"type": "field", "inboundTag": []string{ib.Tag}}
-			if v6 {
-				rule["ip"] = []string{"::/0"}
+			if matchFamily {
+				cidr := "0.0.0.0/0"
+				if v6 {
+					cidr = "::/0"
+				}
+				rule["ip"] = []string{cidr}
 			}
 			if user != nil {
 				tag += fmt.Sprintf("-u%d", user.ID)
@@ -59,14 +63,22 @@ func wireGuardRoutes(node *spec.Node, inbounds []spec.Inbound, users []spec.User
 			}
 			rules = append(rules, rule)
 		}
+		addFamilies := func(user *spec.User) {
+			// IPOnDemand matches any DNS answer. A bounded IPv4 rule must
+			// precede IPv6 only when selected; a catch-all here would also
+			// capture IPv6 literals and AAAA-only domains.
+			if c.DomainPreference == "ipv4" {
+				add(false, true, user)
+			}
+			add(true, true, user)
+			add(false, false, user)
+		}
 		for _, u := range ib.EffectiveUsers(users) {
 			if node.EffectiveSpeedLimit(u) > 0 {
-				add(true, &u)
-				add(false, &u)
+				addFamilies(&u)
 			}
 		}
-		add(true, nil)
-		add(false, nil)
+		addFamilies(nil)
 	}
 	return rules, outs, nil
 }

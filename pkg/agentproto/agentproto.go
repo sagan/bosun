@@ -255,7 +255,21 @@ type WireGuardReport struct {
 	Available bool                  `json:"available"`
 	Applied   bool                  `json:"applied"`
 	Links     []WireGuardLinkStatus `json:"links"`
+	// DomainPreferenceSupported describes renderer support, not exit reachability.
+	DomainPreferenceSupported bool                       `json:"domain_preference_supported,omitempty"`
+	ForwardingSupported       bool                       `json:"forwarding_supported,omitempty"`
+	Forwarding                *WireGuardForwardingStatus `json:"forwarding,omitempty"`
 }
+
+// WireGuardForwardingStatus records a host forwarding check without disclosing
+// firewall rules, host addresses or raw command output.
+type WireGuardForwardingStatus struct {
+	State     string `json:"state"`
+	Backend   string `json:"backend"`
+	Reason    string `json:"reason"`
+	CheckedAt int64  `json:"checked_at"`
+}
+
 type WireGuardLinkStatus struct {
 	Slot      int    `json:"slot"`
 	Connected bool   `json:"connected"`

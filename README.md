@@ -662,9 +662,11 @@ Captain's **Node → Host management → Firewall** shows rule sources and the l
 synchronization result with bosun v0.72.0+. Refresh host state to update it.
 A synchronized rule does not prove public connectivity: earlier deny rules,
 non-default firewalld zones, cloud firewalls and NAT mappings can still block
-traffic. This does not alter WG forwarding policy. SSH rules remain explicitly
-managed by the operator. Disabling `firewall_auto_open` stops reconciliation;
-it does not delete existing rules. The updater floor is v0.72.0 because older
+traffic. This listener manager does not alter WG forwarding policy; the separate
+[unreleased WG option](#automatic-forwarding-and-domain-preference-unreleased)
+requires an explicit choice for each connection. SSH rules remain explicitly
+managed by the operator. Disabling `firewall_auto_open` stops listener reconciliation;
+it does not delete existing listener rules. The updater floor is v0.72.0 because older
 binaries cannot preserve the ownership ledger and may adopt manual rules.
 
 ### PROXY protocol (real client addresses behind a relay)
@@ -996,6 +998,64 @@ feature does not alter UFW/firewalld forwarding policy. A handshake alone does
 not prove that subscriber traffic can pass a host default-drop forwarding chain;
 the connection guide includes scoped UFW rules. Bosun's destination restrictions
 remain in effect alongside the host firewall.
+
+### Automatic forwarding and domain preference (unreleased)
+
+Managed links add `auto_forwarding`, an explicit request to maintain B's host
+forwarding allowances. The new Captain UI enables it for new connections;
+existing connections and older API clients remain manual (`false`, preserved by
+Captain migration 78). Editing an existing link can opt in. Turning it off,
+disabling or deleting the link, startup/shutdown cleanup and uninstall retire
+only unchanged, provably owned rules. Manual rules are retained rather than
+adopted. Externally edited or conflicting rules remain for administrator review.
+
+The initial automatic backend is active UFW with unambiguous main-table routes.
+Rules cover the exact WG/public-or-LAN interface pair, A's tunnel address,
+TCP/UDP and the return path. Separate LAN-interface rules include their granted
+destination and port scopes; grants using the public interface remain restricted
+by the nft ACL. The existing nft ACL continues to deny unauthorized destinations
+and cross-tunnel traffic. The private `<data_dir>/wireguard-firewall.json` journal durably
+records ownership intent before changing UFW, allowing recovery and cleanup
+after a restart. Synchronization is retried while managed WG is active, without
+changing the host's default forwarding policy or disabling its firewall.
+
+Adding or deleting rules through the official UFW CLI normally synchronizes
+UFW's user chains. Preserved manual rules are those persistently created through
+UFW; temporary iptables edits inside UFW-managed chains are outside the supported
+ownership model and may be replaced during that synchronization.
+
+Firewalld, simultaneous firewall backends, custom policy routing and ambiguous
+outgoing interfaces or private routes are unsupported and fail explicitly. This
+includes a host that acts as B for one link and A for another: A's source-routing
+rules require manual forwarding management. Global `firewall_auto_open: false`
+also makes an explicitly automatic link fail; it does not silently become
+manual. Failed application freezes the managed WG data path and attempts to
+retire partial owned allowances. To use manual rules on such a host, disable
+the per-connection option and configure forwarding yourself. No active UFW or
+firewalld means no supported firewall was found, not that Docker or other
+iptables/nftables rules permit the traffic.
+
+`domain_preference` accepts `"ipv4"`, `"ipv6"` or `""`. New Captain connections
+prefer IPv4; the empty default preserves the old IPv6-first order. A applies
+the preference when a domain has answers in both families. IPv6 literals and
+AAAA-only domains remain IPv6. There is no translation, automatic creation of
+IPv6 egress, or retry in the other family after a connection fails; no failure
+falls back to A's direct exit. Choose a preference appropriate to B's actual
+connectivity.
+
+The additive report advertises `domain_preference_supported` for A and
+`forwarding_supported` for B, with a separate timestamped forwarding result.
+Captain gates saving and delivery on fresh support. When required support is
+missing, expired or lost after a downgrade, it withholds both endpoint
+configurations and the managed subscriber inbound. A saved setting, synchronized
+host rules and a recent handshake are separate observations, none of which
+replaces a real subscriber connectivity test.
+
+This development branch provisionally reserves bosun `v0.75.0` and Captain
+`v1.28.0` as the built-in update/rollback floors for these additions. Neither
+number denotes a published release here. If the next release uses different
+numbers, synchronize both floors and their tests before publishing; older
+binaries cannot safely ignore the new options or ownership journal.
 
 ## Managed VLESS Reverse
 

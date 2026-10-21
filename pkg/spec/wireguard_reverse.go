@@ -21,6 +21,13 @@ type WireGuardLink struct {
 	ListenPort    int            `json:"listen_port"`
 	MTU           int            `json:"mtu"`
 	PrivateAccess *PrivateAccess `json:"private_access"`
+	// DomainPreference selects the first address family for domains with both
+	// A and AAAA records. Empty preserves the original IPv6-first behavior;
+	// literal addresses and single-family domains retain their address family.
+	DomainPreference string `json:"domain_preference,omitempty"`
+	// AutoForwarding lets the exit manage its scoped host forwarding allowance.
+	// False preserves externally managed rules; transit endpoints ignore it.
+	AutoForwarding bool `json:"auto_forwarding,omitempty"`
 }
 
 func (c WireGuardLink) Validate() error {
@@ -45,6 +52,9 @@ func (c WireGuardLink) Validate() error {
 	}
 	if c.MTU < 1280 || c.MTU > 1420 {
 		return fmt.Errorf("reverse WireGuard MTU must be 1280-1420")
+	}
+	if c.DomainPreference != "" && c.DomainPreference != "ipv4" && c.DomainPreference != "ipv6" {
+		return fmt.Errorf("reverse WireGuard domain preference must be ipv4 or ipv6")
 	}
 	if c.Exit {
 		ep, err := netip.ParseAddrPort(c.Endpoint)

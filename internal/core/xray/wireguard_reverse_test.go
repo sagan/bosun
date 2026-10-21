@@ -3,6 +3,7 @@ package xray
 import (
 	"encoding/json"
 	"net/netip"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +13,14 @@ import (
 )
 
 func TestWireGuardRoutesKeepBillingAndBoundSockets(t *testing.T) {
+	for _, preference := range []string{"", "ipv4", "ipv6"} {
+		t.Run("preference="+preference, func(t *testing.T) {
+			testWireGuardRoutesKeepBillingAndBoundSockets(t, preference)
+		})
+	}
+}
+
+func testWireGuardRoutesKeepBillingAndBoundSockets(t *testing.T, preference string) {
 	priv, _, err := wg.Keypair()
 	if err != nil {
 		t.Fatal(err)
@@ -21,7 +30,7 @@ func TestWireGuardRoutesKeepBillingAndBoundSockets(t *testing.T) {
 		t.Fatal(err)
 	}
 	grant := &spec.PrivateAccess{Mode: "custom", Rules: []spec.PrivateAccessRule{{CIDR: "10.20.0.0/24", Protocol: "tcp", PortStart: 443}, {CIDR: "fd20::/64", Protocol: "tcp", PortStart: 443}}}
-	link := spec.WireGuardLink{Slot: 1, PrivateKey: priv, PeerKey: peer, ListenPort: 51820, MTU: 1380, PrivateAccess: grant}
+	link := spec.WireGuardLink{Slot: 1, PrivateKey: priv, PeerKey: peer, ListenPort: 51820, MTU: 1380, PrivateAccess: grant, DomainPreference: preference}
 	ib := spec.Inbound{Tag: "paid", Core: "xray", Protocol: spec.VLESS, Port: 18443, WireGuardSlot: 1, PrivateAccess: grant}
 	u := spec.User{ID: 1, Name: "customer", UUID: "00000000-0000-4000-8000-000000000001", SpeedLimitMbps: 2}
 	n := spec.Node{WireGuardLinks: []spec.WireGuardLink{link}, Inbounds: []spec.Inbound{ib}, Routes: []spec.RouteRule{{Action: "direct"}}, AuditRules: []spec.AuditRule{{ID: 1, Match: []string{"ip:10.20.0.3/32"}, Action: "block"}}}
@@ -86,6 +95,17 @@ func TestWireGuardRoutesKeepBillingAndBoundSockets(t *testing.T) {
 		t.Fatal("selected inbound bypassed link grants")
 	}
 	// Transport changes must restart sockets instead of hot-updating users.
+	n.WireGuardLinks[0].DomainPreference = "ipv4"
+	if preference == "ipv4" {
+		n.WireGuardLinks[0].DomainPreference = "ipv6"
+	}
+	_, preferenceState, err := render(&n, n.Inbounds, []spec.User{u}, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.inboundsKey == preferenceState.inboundsKey {
+		t.Fatal("domain preference change did not invalidate socket configuration")
+	}
 	n.WireGuardLinks[0].Slot = 2
 	n.Inbounds[0].WireGuardSlot = 2
 	_, st2, err := render(&n, n.Inbounds, []spec.User{u}, renderOptions{})
@@ -108,11 +128,114 @@ func TestWireGuardRoutesKeepBillingAndBoundSockets(t *testing.T) {
 	}
 }
 
+func wireGuardPreferenceFixture(t *testing.T) (spec.Node, []spec.User) {
+	t.Helper()
+	private, _, err := wg.Keypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, peer, err := wg.Keypair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var node spec.Node
+	for i, preference := range []string{"", "ipv4", "ipv6"} {
+		slot := i + 1
+		node.WireGuardLinks = append(node.WireGuardLinks, spec.WireGuardLink{Slot: slot, PrivateKey: private, PeerKey: peer, ListenPort: 51820 + i, MTU: 1380, DomainPreference: preference})
+		node.Inbounds = append(node.Inbounds, spec.Inbound{Tag: "wg-" + strconv.Itoa(slot), Core: "xray", Protocol: spec.VLESS, Port: 18443 + i, WireGuardSlot: slot})
+	}
+	return node, []spec.User{
+		{ID: 1, Name: "limited", UUID: "00000000-0000-4000-8000-000000000001", SpeedLimitMbps: 2},
+		{ID: 2, Name: "unlimited", UUID: "00000000-0000-4000-8000-000000000002"},
+	}
+}
+
+func TestWireGuardDomainPreferenceRoutes(t *testing.T) {
+	node, users := wireGuardPreferenceFixture(t)
+	data, _, err := render(&node, node.Inbounds, users, renderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := decode(t, data)
+	// Evaluate the generated WG rules separately from the normal reserved-IP
+	// denial: these documentation addresses stand in for public DNS answers.
+	var rules []any
+	for _, item := range cfg["routing"].(m)["rules"].([]any) {
+		if tag, _ := item.(m)["outboundTag"].(string); strings.HasPrefix(tag, "wireguard-") {
+			rules = append(rules, item)
+		}
+	}
+	outs := map[string]m{}
+	for _, item := range cfg["outbounds"].([]any) {
+		out := item.(m)
+		outs[out["tag"].(string)] = out
+	}
+	for _, ib := range node.Inbounds {
+		link := node.WireGuardLinks[ib.WireGuardSlot-1]
+		for _, user := range users {
+			for _, addresses := range [][]string{{"198.51.100.20"}, {"2001:db8::20"}, {"198.51.100.20", "2001:db8::20"}, {"2001:db8::20", "198.51.100.20"}, nil} {
+				v6 := len(addresses) == 1 && netip.MustParseAddr(addresses[0]).Is6() || len(addresses) == 2 && link.DomainPreference != "ipv4"
+				family, strategy := "v4", "UseIPv4"
+				if v6 {
+					family, strategy = "v6", "UseIPv6"
+				}
+				want := "wireguard-" + strconv.Itoa(link.Slot) + "-" + family
+				if user.SpeedLimitMbps > 0 {
+					want += "-u" + strconv.FormatInt(user.ID, 10)
+				}
+				got := firstWireGuardAddressRule(t, rules, ib.Tag, spec.InboundUser(user.Name, ib.Tag), addresses, "tcp", 443)
+				if got != want {
+					t.Fatalf("preference %q user %s addresses %v: %s, want %s", link.DomainPreference, user.Name, addresses, got, want)
+				}
+				out := outs[got]
+				if out["sendThrough"] != link.Address(false, v6) || out["settings"].(m)["domainStrategy"] != strategy {
+					t.Fatal("selected route changed the source binding or dial family")
+				}
+				if user.SpeedLimitMbps > 0 {
+					mark := out["streamSettings"].(m)["sockopt"].(m)["mark"].(float64)
+					if int64(mark) != spec.SpeedMark(user.ID) {
+						t.Fatal("selected route lost the user speed mark")
+					}
+				}
+			}
+		}
+	}
+	// Explicit IPv6 preference is exactly the legacy rendering, not a new
+	// DNS policy or an IPv6-only catch-all.
+	node.WireGuardLinks[1].DomainPreference = ""
+	legacyRules, legacyOuts, err := wireGuardRoutes(&node, node.Inbounds, users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.WireGuardLinks[1].DomainPreference = "ipv6"
+	rules6, outs6, err := wireGuardRoutes(&node, node.Inbounds, users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(legacyRules, rules6) || !reflect.DeepEqual(legacyOuts, outs6) {
+		t.Fatal("explicit IPv6 preference changed legacy rendering")
+	}
+	for i := range node.WireGuardLinks {
+		node.WireGuardLinks[i].AutoForwarding = true
+	}
+	autoRules, autoOuts, err := wireGuardRoutes(&node, node.Inbounds, users)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(rules6, autoRules) || !reflect.DeepEqual(outs6, autoOuts) {
+		t.Fatal("exit forwarding preference changed transit routing")
+	}
+}
+
 // Evaluate only the selectors exercised by this test; reject new selector
 // types rather than accidentally treating an unimplemented matcher as true.
 func firstWireGuardRule(t *testing.T, rules []any, inbound, user, ip, network string, port int) string {
 	t.Helper()
-	addr := netip.MustParseAddr(ip)
+	return firstWireGuardAddressRule(t, rules, inbound, user, []string{ip}, network, port)
+}
+
+func firstWireGuardAddressRule(t *testing.T, rules []any, inbound, user string, ips []string, network string, port int) string {
+	t.Helper()
 	for _, raw := range rules {
 		r := raw.(m)
 		match := true
@@ -136,7 +259,9 @@ func firstWireGuardRule(t *testing.T, rules []any, inbound, user, ip, network st
 					if err != nil {
 						t.Fatal(err)
 					}
-					found = found || p.Contains(addr)
+					for _, ip := range ips {
+						found = found || p.Contains(netip.MustParseAddr(ip))
+					}
 				}
 				match = match && found
 			case "network":

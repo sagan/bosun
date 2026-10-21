@@ -86,6 +86,15 @@ func xrayCI(version, arch string) Asset {
 // Manifest lists every release bosun knows about. Newest first per core.
 var Manifest = []Release{
 	{
+		Core: "singbox-extended", Version: "1.14.1-extended-2.7.2-r3", Status: StatusCaution,
+		Note: "shtorm-7 extended 2.7.2, Go 1.26.10 certificate security update and October dependency pins, with_v2ray_api; Mieru requires explicit selection and subscription refresh; wildcard listen only",
+		Assets: map[string]Asset{
+			"linux/amd64": extendedCI("1.14.1-extended-2.7.2-r3", "amd64"), "linux/arm64": extendedCI("1.14.1-extended-2.7.2-r3", "arm64"),
+		},
+		Build: &Build{Repository: "https://github.com/shtorm-7/sing-box-extended.git", Commit: "55faa763f986f4ca8a492d9b2719bc6330d2bef5",
+			Modules: []string{"golang.org/x/crypto@v0.57.0", "golang.org/x/net@v0.60.0", "golang.org/x/text@v0.42.0", "golang.org/x/mod@v0.41.0", "google.golang.org/grpc@v1.83.2", "github.com/go-chi/chi/v5@v5.3.0"}, Package: "./cmd/sing-box", Version: "v1.14.1-extended-2.7.2", Tags: singboxTags, LDFlags: "-checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.14.1-extended-2.7.2"},
+	},
+	{
 		Core: "singbox-extended", Version: "1.14.1-extended-2.7.2-r2", Status: StatusCaution,
 		Note: "shtorm-7 extended 2.7.2, Go 1.26.9 and October dependency security updates, with_v2ray_api; Mieru requires explicit selection and subscription refresh; wildcard listen only",
 		Assets: map[string]Asset{

@@ -41,7 +41,7 @@ The real Extended regression runs with `BOSUN_EXTENDED_TEST_BINARY=/path/to/sing
 cores:
   singbox: {}
   singbox_extended:
-    version: 1.14.1-extended-2.7.2-r2
+    version: 1.14.1-extended-2.7.2-r3
     stats_listen: 127.0.0.1:9105
 ```
 
@@ -49,7 +49,7 @@ The build pins [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box
 
 Linux amd64/arm64 packages are produced by the reusable release workflow. Before those assets are published, or on other platforms, the installer can build from the pinned source when Go and git are available. The source build applies the same dependency pins. The release workflow checks the exact source/build tags for reachable vulnerabilities and exercises the real binary; a bare Go module advisory is not evidence that its affected package is compiled into the executable.
 
-The `-r2` package keeps the same upstream commit and uses Go 1.26.9 with reviewed October security dependency updates. The previous `-r1` assets remain immutable; existing explicitly activated installations retain their selection until the administrator switches versions.
+The `-r3` package keeps the same upstream commit and reviewed October dependency pins, and uses Go 1.26.10 for the certificate security update. Previous `-r1`/`-r2` assets remain immutable; existing explicitly activated installations retain their selection until the administrator switches versions.
 
 ### WARP outbound
 

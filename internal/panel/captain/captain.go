@@ -438,6 +438,10 @@ func (c *Client) TrafficIdentity() string {
 // One serial sampler per driver, including monitor-only nodes. Network I/O is
 // independent of reports and config pulls, and is cancelled on driver shutdown.
 func (c *Client) watchAddresses() {
+	c.watchAddressSamples(dns.ObservePublicAddresses)
+}
+
+func (c *Client) watchAddressSamples(observe func(context.Context) agentproto.PublicAddresses) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
@@ -447,14 +451,15 @@ func (c *Client) watchAddresses() {
 		case <-ctx.Done():
 		}
 	}()
-	tick := time.NewTicker(5 * time.Minute)
-	defer tick.Stop()
+	started := time.Now()
+	timer := time.NewTimer(addressProbeInterval(0))
+	defer timer.Stop()
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		sampleCtx, done := context.WithTimeout(ctx, 12*time.Second)
-		sample := dns.ObservePublicAddresses(sampleCtx)
+		sample := observe(sampleCtx)
 		done()
 		if ctx.Err() != nil {
 			return
@@ -462,10 +467,20 @@ func (c *Client) watchAddresses() {
 		c.mu.Lock()
 		c.addresses = &sample
 		c.mu.Unlock()
+		timer.Reset(addressProbeInterval(time.Since(started)))
 		select {
 		case <-ctx.Done():
 			return
-		case <-tick.C:
+		case <-timer.C:
 		}
 	}
+}
+
+// Keep several independent startup samples: reports may be a minute apart,
+// so a single fast retry could be overwritten before Captain ever sees it.
+func addressProbeInterval(elapsed time.Duration) time.Duration {
+	if elapsed < 3*time.Minute {
+		return 30 * time.Second
+	}
+	return 5 * time.Minute
 }

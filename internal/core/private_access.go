@@ -12,7 +12,8 @@ import (
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
 
-// PrivateRoutes intersects permissions with the existing ordered route list.
+// PrivateRoutes intersects dual-layer permissions with the ordered route list.
+// Core-only permissions instead contribute rejects and keep ordinary routing.
 // It never converts an allow into an unconditional direct rule. The caller
 // places these rules before the ordinary private-destination rejection, but
 // after managed transit routing and audit blocks.
@@ -55,7 +56,7 @@ func PrivateRoutes(kind string, node *spec.Node, inbounds []spec.Inbound, users 
 	var result, extra []any
 	clones := map[string]string{}
 	for _, grant := range grants {
-		if !tags[grant.Inbound] {
+		if grant.CoreOnly || !tags[grant.Inbound] {
 			continue
 		}
 		routes := append(append([]any{}, normal...), map[string]any{outkey: final})

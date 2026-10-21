@@ -158,6 +158,7 @@ func TestCoreOnlyExplicitGateAndRevocation(t *testing.T) {
 	}}
 	policy := &spec.PrivateAccess{Mode: "internal", Enforcement: "core_only"}
 	n := &spec.Node{Inbounds: []spec.Inbound{{Tag: "private", Protocol: spec.VLESS, PrivateAccess: policy}}}
+	n.Outbounds = []spec.Outbound{{Tag: "proxy", Protocol: "socks"}}
 	if !a.coreOnlyPrivateAccessReady() || a.privateAccessReady() {
 		t.Fatal("mode gate wrong")
 	}

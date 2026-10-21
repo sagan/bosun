@@ -139,6 +139,26 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 	// The node's own neighbourhood is refused before anything else; the
 	// nft egress guard is the backstop for destinations reached by name.
 	privRules, _ := renderRoutes(node.PrivateDestRules())
+	// Core-only inbounds have their own complement deny rules. Exclude them
+	// from the global private reject without choosing any outbound for them.
+	var coreOnlyTags []string
+	for _, ib := range inbounds {
+		if ib.PrivateAccess.CoreOnly() {
+			tag := ib.Tag
+			if ib.ShadowTLS != nil {
+				tag = spec.ShadowTLSTag(tag)
+			}
+			coreOnlyTags = append(coreOnlyTags, tag)
+		}
+	}
+	if len(coreOnlyTags) > 0 {
+		for i, raw := range privRules {
+			rule := cloneM(raw.(m))
+			delete(rule, "action")
+			delete(rule, "outbound")
+			privRules[i] = m{"type": "logical", "mode": "and", "rules": []any{rule, m{"inbound": coreOnlyTags, "invert": true}}, "action": "reject"}
+		}
+	}
 	rules, sets := renderRoutes(node.Routes)
 	rules = append(rules, limitRules...)
 	// Egress follows ingress: a direct exit bound to each inbound's own
@@ -191,7 +211,7 @@ func render(node *spec.Node, inbounds []spec.Inbound, users []spec.User, opt ren
 			}
 		}
 		// Resolve after sniffing and before authorization, using the same
-		// destination-address list consumed by the direct dialer.
+		// destination-address list consumed by direct and proxy dialing.
 		route["rules"] = append(sniffRules(inbounds), append([]any{m{"inbound": tags, "action": "resolve", "server": server}}, rules...)...)
 	}
 	if err := core.ApplyOverride("singbox", cfg, node.Overrides[singboxDistribution(opt.Distribution)]); err != nil {

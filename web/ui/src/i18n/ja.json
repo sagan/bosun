@@ -988,7 +988,7 @@
     "dual": "二重保護（既定）",
     "coreOnly": "コアポリシーのみ",
     "enforcementHint": "cores.egress_guard の明示的な無効化と新しい能力報告が必要です。",
-    "coreOnlyHint": "sing-box / Extended の直接出口のみ対応。nft による宛先隔離は使用しませんが、非 root と制御 API 保護は必要です。Xray、管理リバーストンネル、プロキシチェーンは非対応。変更時は接続が中断されます。",
+    "coreOnlyHint": "sing-box / Extended に対応。更新済みノードでは WARP やプロキシを含む既存の出力ルーティングを維持します。nft の宛先隔離は使わず、非 root と制御 API の保護は必要です。Xray と管理対象のリバーストンネルには非対応です。変更時は接続が切断されます。",
     "actualMode": "実際の保護方式",
     "runtimeUnknown": "実行状態不明",
     "confirmCoreOnly": "nft による宛先隔離が無効であることを理解し、このインバウンドのコアのみの保護を承認します。"

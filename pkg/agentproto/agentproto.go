@@ -252,6 +252,7 @@ type ReportResponse struct {
 // WireGuardReport contains transport diagnostics, never subscriber accounting.
 // Applied is independent of Connected; neither proves exit Internet health.
 type WireGuardReport struct {
+	Setup     *spec.WireGuardSetup  `json:"setup,omitempty"`
 	Available bool                  `json:"available"`
 	Applied   bool                  `json:"applied"`
 	Links     []WireGuardLinkStatus `json:"links"`

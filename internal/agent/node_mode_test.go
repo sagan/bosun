@@ -39,7 +39,7 @@ func TestMonitorModeRejectsProxyStateAndJobs(t *testing.T) {
 	if err := a.ManageCore(ctx, spec.CoreRequest{}); !errors.Is(err, spec.ErrMonitorOnly) {
 		t.Fatal(err)
 	}
-	for _, kind := range []string{spec.CoreManagementKind, "warp_register", "reality_scan"} {
+	for _, kind := range []string{spec.WireGuardSetupKind, spec.CoreManagementKind, "warp_register", "reality_scan"} {
 		if res := a.execJob(ctx, agentproto.Job{ID: "job", Kind: kind}); res.Error != spec.ErrMonitorOnly.Error() {
 			t.Fatal(res)
 		}

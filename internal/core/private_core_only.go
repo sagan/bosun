@@ -9,7 +9,7 @@ import (
 )
 
 // CoreOnlyRejects rejects ANY resolved address outside the inbound's grant
-// before the ordinary allow rules run. A positive CIDR match alone is unsafe:
+// before ordinary routing runs. A positive CIDR match alone is unsafe:
 // a DNS answer can contain both an allowed and an unauthorized private IP.
 // Complements are compiled independently for each transport and port segment.
 func CoreOnlyRejects(inbounds []spec.Inbound) ([]any, error) {

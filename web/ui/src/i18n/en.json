@@ -988,7 +988,7 @@
     "dual": "Dual protection (default)",
     "coreOnly": "Core policy only",
     "enforcementHint": "Core-only requires explicitly disabled cores.egress_guard and a current capability report.",
-    "coreOnlyHint": "Only sing-box / Extended with direct exits. No nft destination isolation; non-root and control API protection remain required. Xray, managed reverse tunnels and proxy chains are unsupported. Changing policy interrupts connections.",
+    "coreOnlyHint": "Supports sing-box / Extended. Upgraded nodes preserve existing split routing, including WARP and proxy exits. No nft destination isolation; non-root and control API protection remain required. Xray and managed reverse tunnels are unsupported. Changing policy interrupts connections.",
     "actualMode": "Effective protection",
     "runtimeUnknown": "Runtime unknown",
     "confirmCoreOnly": "I understand nft destination isolation is disabled and authorize this inbound to use core-only protection."

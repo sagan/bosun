@@ -988,7 +988,7 @@
     "dual": "双层防护（默认）",
     "coreOnly": "仅内核策略",
     "enforcementHint": "仅内核策略要求显式关闭 cores.egress_guard，并有新鲜的节点能力上报。",
-    "coreOnlyHint": "仅支持 sing-box／Extended 直连出站。不使用 nft 目的地址隔离，仍要求非 root 账户和控制 API 保护。不支持 Xray、托管反向隧道或代理链。修改策略会中断连接。",
+    "coreOnlyHint": "支持 sing-box／Extended；升级后的节点可沿用原有出站分流，包括 WARP 和代理出站。不使用 nft 目的地址隔离，仍要求非 root 账户和控制 API 保护。不支持 Xray 和托管反向隧道。修改策略会中断连接。",
     "actualMode": "实际防护方式",
     "runtimeUnknown": "运行状态未知",
     "confirmCoreOnly": "我理解当前未启用 nft 目的地址隔离，同意此入站在仅内核防护下授权私网访问。"

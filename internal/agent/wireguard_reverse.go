@@ -10,6 +10,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/reversewg"
 	"github.com/zeptop-dev/bosun/internal/shaper"
 	"github.com/zeptop-dev/bosun/internal/wgfirewall"
+	"github.com/zeptop-dev/bosun/internal/wgsetup"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 )
@@ -247,7 +248,7 @@ func hasWireGuardTransit(n *spec.Node) bool {
 }
 
 func (a *Agent) wireGuardReport(ctx context.Context) *agentproto.WireGuardReport {
-	rep := &agentproto.WireGuardReport{Available: a.wireGuardReady(), Applied: !a.dirty, Links: []agentproto.WireGuardLinkStatus{}, DomainPreferenceSupported: true, ForwardingSupported: true}
+	rep := &agentproto.WireGuardReport{Setup: a.wireGuardSetup(), Available: a.wireGuardReady(), Applied: !a.dirty, Links: []agentproto.WireGuardLinkStatus{}, DomainPreferenceSupported: true, ForwardingSupported: true}
 	if a.wireGuard != nil && a.wireGuard.forwardingStatus != nil {
 		status := *a.wireGuard.forwardingStatus
 		rep.Forwarding = &status
@@ -275,4 +276,11 @@ func (a *Agent) wireGuardReport(ctx context.Context) *agentproto.WireGuardReport
 		rep.Links = append(rep.Links, out)
 	}
 	return rep
+}
+
+func (a *Agent) wireGuardSetup() *spec.WireGuardSetup {
+	s := wgsetup.Inspect()
+	s.Checks = append(s.Checks, a.privateAccessReadiness().Checks...)
+	s.Checks = append(s.Checks, spec.PrivateAccessCheck{ID: "full", OK: !a.MonitorOnly()}, spec.PrivateAccessCheck{ID: "shaper", OK: a.Shaper != nil && a.Shaper.Supported()})
+	return s
 }

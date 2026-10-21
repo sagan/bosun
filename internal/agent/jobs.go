@@ -10,6 +10,7 @@ import (
 	"github.com/zeptop-dev/bosun/internal/panel"
 	"github.com/zeptop-dev/bosun/internal/privatecheck"
 	"github.com/zeptop-dev/bosun/internal/realityscan"
+	"github.com/zeptop-dev/bosun/internal/wgsetup"
 	"github.com/zeptop-dev/bosun/pkg/agentproto"
 	"github.com/zeptop-dev/bosun/pkg/selfupdate"
 	"github.com/zeptop-dev/bosun/pkg/spec"
@@ -68,7 +69,7 @@ func (a *Agent) runJobs(ctx context.Context) {
 
 func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobResult {
 	out := agentproto.JobResult{ID: j.ID, Kind: j.Kind}
-	if (a.MonitorOnly() || a.modeChanging.Load()) && (j.Kind == spec.CoreManagementKind || j.Kind == "warp_register" || j.Kind == "reality_scan") {
+	if (a.MonitorOnly() || a.modeChanging.Load()) && (j.Kind == spec.WireGuardSetupKind || j.Kind == spec.CoreManagementKind || j.Kind == "warp_register" || j.Kind == "reality_scan") {
 		out.Error = spec.ErrMonitorOnly.Error()
 		return out
 	}
@@ -118,6 +119,25 @@ func (a *Agent) execJob(ctx context.Context, j agentproto.Job) agentproto.JobRes
 		}
 		out.Result, _ = json.Marshal(a.CoreInventory())
 
+	case spec.WireGuardSetupKind:
+		var p spec.WireGuardSetupRequest
+		if json.Unmarshal(j.Params, &p) != nil || p.Validate() != nil {
+			out.Error = "invalid WireGuard setup request"
+			break
+		}
+		now := time.Now().Unix()
+		if p.ExpiresAt <= now || p.ExpiresAt > now+spec.WireGuardSetupTTL+30 {
+			out.Error = "WireGuard setup request expired or clock is out of sync"
+			break
+		}
+		jobctx, cancel := context.WithDeadline(ctx, time.Unix(p.ExpiresAt, 0))
+		defer cancel()
+		result := spec.WireGuardSetupResult{}
+		if p.Action == "install" {
+			result.ErrorCode = wgsetup.Install(jobctx)
+		}
+		result.Status = a.wireGuardSetup()
+		out.Result, _ = json.Marshal(result)
 	case spec.PrivateAccessCheckKind:
 		result := a.privateAccessReadiness()
 		privatecheck.Probe(ctx, result)

@@ -19,5 +19,6 @@ type PrivateAccessCheck struct {
 // Adapter features are independent of the node firewall and process privileges.
 type PrivateAccessPolicyCapabilities struct {
 	Scoped         bool `json:"scoped"`
+	SplitRouting   bool `json:"split_routing,omitempty"`
 	IndependentDNS bool `json:"independent_dns"`
 }

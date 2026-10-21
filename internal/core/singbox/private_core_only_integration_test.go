@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zeptop-dev/bosun/internal/coreinstall"
 	"github.com/zeptop-dev/bosun/pkg/spec"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -24,10 +26,35 @@ import (
 // Runs without nft, routing changes or elevated privileges. Targets are temporary
 // echo services on a local RFC1918 interface; no operator addresses are fixtures.
 func TestCoreOnlyRealSingbox(t *testing.T) {
-	binaryPath := os.Getenv("BOSUN_COREONLY_TEST_BINARY")
-	if binaryPath == "" {
-		t.Skip("set BOSUN_COREONLY_TEST_BINARY to a sing-box binary with v2ray_api")
+	for _, distribution := range []string{"singbox", "singbox-extended"} {
+		t.Run(distribution, func(t *testing.T) {
+			binaryPath := os.Getenv("BOSUN_COREONLY_TEST_BINARY")
+			if distribution == "singbox-extended" {
+				binaryPath = os.Getenv("BOSUN_EXTENDED_TEST_BINARY")
+			}
+			if binaryPath == "" && os.Getenv("BOSUN_TEST_DOWNLOAD_CORES") == "1" {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+				release, ok := coreinstall.Default(distribution)
+				if !ok {
+					t.Fatal("missing reviewed core")
+				}
+				var err error
+				binaryPath, err = coreinstall.New(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil))).Ensure(ctx, distribution, release.Version)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if binaryPath == "" {
+				t.Skip("set BOSUN_COREONLY_TEST_BINARY / BOSUN_EXTENDED_TEST_BINARY or BOSUN_TEST_DOWNLOAD_CORES=1")
+			}
+			for _, mode := range []string{"direct", "proxy-rule", "proxy-default"} {
+				t.Run(mode, func(t *testing.T) { testCoreOnlyRealSingbox(t, mode, distribution, binaryPath) })
+			}
+		})
 	}
+}
+func testCoreOnlyRealSingbox(t *testing.T, mode, distribution, binaryPath string) {
 	var host netip.Addr
 	addresses, _ := net.InterfaceAddrs()
 	for _, a := range addresses {
@@ -144,14 +171,130 @@ func TestCoreOnlyRealSingbox(t *testing.T) {
 		return p
 	}
 	inboundPort, deniedPort := freePort(), freePort()
+	for deniedPort == inboundPort {
+		deniedPort = freePort()
+	}
 	policy := &spec.PrivateAccess{Mode: "custom", Enforcement: "auto", AllowCoreOnly: true, Rules: []spec.PrivateAccessRule{{CIDR: host.String(), Protocol: "tcp", PortStart: port}, {CIDR: host.String(), Protocol: "udp", PortStart: other}}}
 	n := &spec.Node{Inbounds: []spec.Inbound{{Tag: "allowed", Protocol: spec.VLESS, Listen: "127.0.0.1", Port: inboundPort, PrivateAccess: policy}, {Tag: "denied", Protocol: spec.VLESS, Listen: "127.0.0.1", Port: deniedPort}}, DNS: []string{dns.LocalAddr().String()}}
+	var proxyRequests, proxyDomains atomic.Int32
+	if mode != "direct" {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { listener.Close() })
+		go func() {
+			for {
+				c, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				go func() {
+					defer c.Close()
+					c.SetDeadline(time.Now().Add(2 * time.Second))
+					h := make([]byte, 2)
+					if _, err := io.ReadFull(c, h); err != nil {
+						return
+					}
+					methods := make([]byte, int(h[1]))
+					if _, err := io.ReadFull(c, methods); err != nil {
+						return
+					}
+					c.Write([]byte{5, 0})
+					request := make([]byte, 4)
+					if _, err := io.ReadFull(c, request); err != nil {
+						return
+					}
+					size := 6
+					if request[1] == 3 {
+						switch request[3] {
+						case 4:
+							size = 18
+						case 3:
+							b := make([]byte, 1)
+							if _, err := io.ReadFull(c, b); err != nil {
+								return
+							}
+							size = int(b[0]) + 2
+						}
+					} else if request[3] != 1 {
+						proxyDomains.Add(1)
+						return
+					}
+					target := make([]byte, size)
+					if _, err := io.ReadFull(c, target); err != nil {
+						return
+					}
+					if request[1] == 3 { // SOCKS UDP associate: assert the datagram also carries the checked IP.
+						relay, err := net.ListenPacket("udp", "127.0.0.1:0")
+						if err != nil {
+							return
+						}
+						defer relay.Close()
+						rp := relay.LocalAddr().(*net.UDPAddr).Port
+						c.Write([]byte{5, 0, 0, 1, 127, 0, 0, 1, byte(rp >> 8), byte(rp)})
+						relay.SetDeadline(time.Now().Add(time.Second))
+						packet := make([]byte, 2048)
+						size, peer, err := relay.ReadFrom(packet)
+						if err != nil || size < 10 {
+							return
+						}
+						proxyRequests.Add(1)
+						if packet[3] != 1 {
+							proxyDomains.Add(1)
+							return
+						}
+						address := net.IP(packet[4:8]).String()
+						p := int(binary.BigEndian.Uint16(packet[8:10]))
+						if address != host.String() || p != other {
+							return
+						}
+						upstream, err := net.DialTimeout("udp", net.JoinHostPort(address, strconv.Itoa(p)), time.Second)
+						if err != nil {
+							return
+						}
+						defer upstream.Close()
+						upstream.SetDeadline(time.Now().Add(time.Second))
+						upstream.Write(packet[10:size])
+						reply := make([]byte, 2048)
+						count, err := upstream.Read(reply)
+						if err != nil {
+							return
+						}
+						relay.WriteTo(append(packet[:10:10], reply[:count]...), peer)
+						io.Copy(io.Discard, c)
+						return
+					}
+					proxyRequests.Add(1)
+					ip := net.IP(target[:4]).String()
+					destinationPort := int(binary.BigEndian.Uint16(target[4:]))
+					if ip != host.String() || destinationPort != port {
+						return
+					}
+					upstream, err := net.DialTimeout("tcp", net.JoinHostPort(ip, strconv.Itoa(destinationPort)), time.Second)
+					if err != nil {
+						return
+					}
+					defer upstream.Close()
+					c.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
+					go io.Copy(upstream, c)
+					io.Copy(c, upstream)
+				}()
+			}
+		}()
+		n.Outbounds = []spec.Outbound{{Tag: "proxy", Protocol: "socks", Settings: map[string]any{"server": "127.0.0.1", "server_port": listener.Addr().(*net.TCPAddr).Port, "version": "5"}}}
+		n.Routes = []spec.RouteRule{{Match: []string{"port:" + strconv.Itoa(port) + "," + strconv.Itoa(other)}, Action: "outbound", Value: "proxy"}}
+		if mode == "proxy-default" {
+			n.DefaultOutbound = "proxy"
+			n.Routes = nil
+		}
+	}
 	users := []spec.User{{ID: 1, Name: "fixture", UUID: "11111111-1111-4111-8111-111111111111"}}
 	resolved, e := n.ResolvePrivateAccessIntent(true)
 	if e != nil {
 		t.Fatal(e)
 	}
-	raw, e := render(resolved, resolved.Inbounds, users, renderOptions{StatsListen: net.JoinHostPort("127.0.0.1", strconv.Itoa(freePort()))})
+	raw, e := render(resolved, resolved.Inbounds, users, renderOptions{Distribution: distribution, StatsListen: net.JoinHostPort("127.0.0.1", strconv.Itoa(freePort()))})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -182,13 +325,18 @@ func TestCoreOnlyRealSingbox(t *testing.T) {
 			t.Log(strings.ReplaceAll(output.String(), host.String(), "<fixture-ip>"))
 		}
 	}()
-	for i := 0; i < 100; i++ {
+	ready := false
+	for i := 0; i < 500; i++ {
 		c, e := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(inboundPort)), 50*time.Millisecond)
 		if e == nil {
 			c.Close()
+			ready = true
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if !ready {
+		t.Fatal("fixture listener startup timed out")
 	}
 	request := func(in int, dest string, p int, datagram bool) bool {
 		c, e := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(in)), time.Second)
@@ -248,5 +396,8 @@ func TestCoreOnlyRealSingbox(t *testing.T) {
 				t.Fatal("unexpected access result")
 			}
 		})
+	}
+	if mode != "direct" && (proxyRequests.Load() != 4 || proxyDomains.Load() != 0) {
+		t.Fatalf("wrong proxy delivery: requests=%d domain requests=%d", proxyRequests.Load(), proxyDomains.Load())
 	}
 }

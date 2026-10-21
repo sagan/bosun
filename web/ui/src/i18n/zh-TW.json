@@ -988,7 +988,7 @@
     "dual": "雙層防護（預設）",
     "coreOnly": "僅核心策略",
     "enforcementHint": "需要明確關閉 cores.egress_guard，並有近期能力報告。",
-    "coreOnlyHint": "僅支援 sing-box／Extended 直連出口。不使用 nft 目的位址隔離，仍需非 root 帳戶及控制 API 保護。不支援 Xray、託管反向隧道或代理鏈。修改會中斷連線。",
+    "coreOnlyHint": "支援 sing-box／Extended；升級後的節點可沿用原有出站分流，包括 WARP 和代理出站。不使用 nft 目的位址隔離，仍要求非 root 帳戶與控制 API 保護。不支援 Xray 和託管反向隧道。修改策略會中斷連線。",
     "actualMode": "實際防護方式",
     "runtimeUnknown": "執行狀態未知",
     "confirmCoreOnly": "我理解目前未啟用 nft 目的位址隔離，同意此入站僅由核心策略授權私網存取。"

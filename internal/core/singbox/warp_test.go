@@ -104,12 +104,17 @@ func TestWARPRealConfigs(t *testing.T) {
 				protocols = append(protocols, spec.SSH, spec.Mieru)
 			}
 			for _, protocol := range protocols {
-				for _, mode := range []string{"unused", "default", "rule"} {
+				for _, mode := range []string{"unused", "default", "rule", "balancer"} {
 					t.Run(string(protocol)+"/"+mode, func(t *testing.T) {
-						ib := spec.Inbound{Tag: "in", Protocol: protocol, Port: 24450, Core: tc.distribution}
+						ib := spec.Inbound{Tag: "in", Protocol: protocol, Port: 24450, Core: tc.distribution, PrivateAccess: &spec.PrivateAccess{Mode: "internal", Enforcement: "core_only"}}
 						spec.FillInboundSecrets(&ib)
 						node := &spec.Node{Inbounds: []spec.Inbound{ib}, Outbounds: []spec.Outbound{warpFixture(t)}}
-						if mode == "default" {
+						second := warpFixture(t)
+						second.Tag = "warp-two"
+						node.Outbounds = append(node.Outbounds, second, spec.Outbound{Tag: "pool", Balancer: &spec.Balancer{Members: []string{"warp", "warp-two"}}})
+						if mode == "balancer" {
+							node.DefaultOutbound = "pool"
+						} else if mode == "default" {
 							node.DefaultOutbound = "warp"
 						} else if mode == "rule" {
 							node.Routes = []spec.RouteRule{{Match: []string{"domain:example.com"}, Action: "outbound", Value: "warp"}}

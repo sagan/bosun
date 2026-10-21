@@ -23,7 +23,7 @@ Verified end to end against the manifest's tested releases (sing-box
 - Durable Captain reporting journals, structured Linux exit diagnostics with a separately rebuilt MIT GeoCheck tool, and named typed inbound/outbound/route presets with change previews. [Operation and failure boundaries](docs/DIAGNOSTICS_AND_PRESETS.md).
 
 - Panel drivers: Captain (`bosun/pkg/agentproto`: one-time pairing, ETag state, one combined report per interval, immediate pull when the panel signals a change) and Xboard's UniProxy v1 API.
-- Automatic private-access enforcement (v0.74): independent adapter/runtime capability reports, prerequisite checks, and acknowledged core-only authorization for direct sing-box/Extended exits. Existing dual-layer policies remain compatible. [Details](#automatic-private-access-enforcement).
+- Automatic private-access enforcement (v0.74): independent adapter/runtime capability reports, prerequisite checks, and acknowledged core-only authorization for sing-box/Extended exits. Existing dual-layer policies remain compatible. [Details](#automatic-private-access-enforcement).
 - Default-off per-inbound private destination access for supported sing-box/Xray configurations, with CIDR/protocol/port scopes, UID/socket-mark nft enforcement and independent managed Reverse exit permissions. Existing user tc classes are retained; unsupported proxy chains and overrides are rejected. [Usage and support boundaries](#per-inbound-private-access-bosun-063--captain-114).
 - Per-inbound user lists (`spec.Inbound.ScopedUsers`): an inbound restricted to a user group only provisions that group; the mita adapter runs one instance per inbound because mita users are global to a process.
 - WARP outbounds reuse existing account credentials across official and Extended sing-box; distribution-specific rendering avoids unsupported fields while preserving stored credentials. [WARP compatibility and live checks](docs/CORE_MANAGEMENT.md#warp-outbound).
@@ -663,7 +663,7 @@ synchronization result with bosun v0.72.0+. Refresh host state to update it.
 A synchronized rule does not prove public connectivity: earlier deny rules,
 non-default firewalld zones, cloud firewalls and NAT mappings can still block
 traffic. This listener manager does not alter WG forwarding policy; the separate
-[unreleased WG option](#automatic-forwarding-and-domain-preference-unreleased)
+[WG forwarding option](#automatic-forwarding-and-domain-preference)
 requires an explicit choice for each connection. SSH rules remain explicitly
 managed by the operator. Disabling `firewall_auto_open` stops listener reconciliation;
 it does not delete existing listener rules. The updater floor is v0.72.0 because older
@@ -988,6 +988,15 @@ No tunnel failure falls back to A's direct exit. Both nodes require Linux,
 `wg`, `ip`, `nft`, `tc`, root network privileges and non-root protected cores.
 The built-in updater/rollback cannot go below v0.68.0, because older binaries
 ignore managed WG routing fields. Unknown backup versions are refused.
+New setup reports list missing tools and distinguish a missing binary from a
+service PATH that cannot find it. Captain administrators can explicitly request
+installation of missing dependencies on native root Debian/Ubuntu, Alpine and
+supported dnf systems. This fixed-package job expires after five minutes,
+rechecks locally and triggers an immediate report. It does not configure the
+host firewall, grant capabilities, change core users or install a kernel.
+Containers require dependencies to be supplied in their image; binary upgrades
+do not automatically run a package manager. A successful package operation does
+not imply that the tunnel or the remaining runtime prerequisites are ready.
 The feature requires fresh capabilities on both peers and Xray on A; it is not
 an independently editable standalone WireGuard client. See the
 [connection guide](https://github.com/zeptop-dev/captain/blob/master/docs/NODES.md#managed-reverse-wireguard-captain-120--bosun-068).
@@ -999,7 +1008,7 @@ not prove that subscriber traffic can pass a host default-drop forwarding chain;
 the connection guide includes scoped UFW rules. Bosun's destination restrictions
 remain in effect alongside the host firewall.
 
-### Automatic forwarding and domain preference (unreleased)
+### Automatic forwarding and domain preference
 
 Managed links add `auto_forwarding`, an explicit request to maintain B's host
 forwarding allowances. The new Captain UI enables it for new connections;
@@ -1051,11 +1060,9 @@ configurations and the managed subscriber inbound. A saved setting, synchronized
 host rules and a recent handshake are separate observations, none of which
 replaces a real subscriber connectivity test.
 
-This development branch provisionally reserves bosun `v0.75.0` and Captain
-`v1.28.0` as the built-in update/rollback floors for these additions. Neither
-number denotes a published release here. If the next release uses different
-numbers, synchronize both floors and their tests before publishing; older
-binaries cannot safely ignore the new options or ownership journal.
+These additions set built-in update/rollback floors to bosun `v0.75.0` and
+Captain `v1.28.0`: older binaries cannot safely ignore the new options or
+ownership journal. Manual binary replacement remains outside that protection.
 
 ## Managed VLESS Reverse
 
@@ -1099,7 +1106,7 @@ a non-root core account, enabled egress protection and sing-box or Xray.
 Capabilities reflect the node's runtime prerequisites. Native Hysteria, mita
 and snell-server, WireGuard inbounds, shared-key Snell and Xray SOCKS/HTTP
 inbounds do not support this policy. Hysteria2 may use sing-box instead.
-Currently the whole node must use direct/freedom outbounds: proxy chains,
+For dual-layer enforcement, the whole node must use direct/freedom outbounds: proxy chains,
 remote proxies, WARP, balancers, GeoIP split rules, global private grants and
 raw overrides of routing, DNS, policy, inbounds or outbounds are rejected.
 This restriction avoids claiming enforcement when a remote proxy or override
@@ -1132,7 +1139,10 @@ Use **Overview → Core management** in standalone mode, or the corresponding ca
 ### Public address observations (Captain 1.21 / bosun 0.69)
 
 Captain-managed full and monitor-only nodes independently probe outbound public
-IPv4 and IPv6 every five minutes. Two HTTPS responders must agree per family;
+IPv4 and IPv6 every 30 seconds for the first three minutes after startup, then
+every five minutes. Repeated startup samples let minute-spaced reports carry
+independent observations without waiting a full five minutes. Two HTTPS
+responders must agree per family;
 connections bypass environment HTTP proxies and force the requested family.
 Probes run separately from configuration pulls and traffic reports. Unknown or
 failed probes never mean that an address should be deleted. Captain receives the
@@ -1246,7 +1256,8 @@ mode and environmental prerequisites separately. The existing capability flags
 retain their runtime meaning for older panels. Missing/stale capabilities cannot
 authorize new automatic policies.
 
-Core-only currently supports sing-box / sing-box Extended with direct exits.
+Core-only supports sing-box / sing-box Extended and preserves existing split
+routing, including WARP, proxy chains and balancers on upgraded nodes.
 Configure `cores.egress_guard: false` explicitly and restart bosun if this behavior
 is wanted; the panel does not change the node configuration. Retain the non-root
 proxy account and root-only control API guard. This removes nft **destination
@@ -1258,13 +1269,24 @@ Core-only rules resolve the destination before authorization, reject any DNS
 answer containing an unauthorized private address for that inbound/transport/
 port, and dial the same resolved address list. Loopback, link-local and metadata
 remain denied. Mixed allowed/disallowed DNS answers are deliberately rejected as
-a whole. Rules preserve normal direct routing choices; no nft private grants are
+a whole. Authorization only rejects disallowed destinations; accepted traffic
+continues through the original routing rules and default outbound. It does not
+force private traffic to a local direct exit. No nft private grants are
 created. Socket marks are only needed for traffic shaping in this mode.
 
 The pinned Xray version cannot guarantee that routing and final dialing use the
 same DNS result, so Xray is not advertised as supporting this mode. Managed
-VLESS/WireGuard reverse tunnels, proxy chains, WARP, balancers and policy-changing
-overrides are also unsupported. Existing dual-layer Xray support is unchanged.
+VLESS/WireGuard reverse tunnels and policy-changing overrides remain unsupported. Existing dual-layer Xray support is unchanged.
 Changing or revoking a policy stops the old proxy connections before applying the
 new policy. A node downgrade or missing capability report prevents delivery of
 core-only grants rather than silently ignoring the new field.
+
+
+Core-only split routing uses the additive `private_access_policy.split_routing`
+capability. Captain refuses the expanded combination for old/stale nodes, both
+when saving and delivering state. Multiple WARP exits can coexist with per-inbound
+permissions. Destinations are interpreted at the selected exit: granting a LAN
+CIDR does not automatically route it directly to this server's LAN. Add an explicit
+direct split rule if that is the intended path. The authorization check consumes
+resolved addresses before routing, including mixed-answer rejection; remote
+proxies receive checked IPs rather than a domain to resolve independently.

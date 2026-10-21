@@ -171,9 +171,9 @@ func (n *Node) HasPrivateAccess() bool {
 	return false
 }
 
-// ValidatePrivateAccessNode refuses combinations whose final dial socket cannot
-// reliably carry the scope. In particular a proxy/detour may resolve at an
-// uncontrolled remote exit, and raw overrides can erase managed routes/marks.
+// ValidatePrivateAccessNode keeps dual-layer grants on controllable direct
+// sockets. Core-only grants authorize resolved destinations before ordinary
+// routing; overrides and direct target rewriting could bypass either policy.
 func (n *Node) ValidatePrivateAccessNode() error {
 	for _, ib := range n.Inbounds {
 		if ib.PrivateAccess.Enabled() && (ib.PrivateAccess.CoreOnly() || ib.PrivateAccess.Enforcement == "auto") && (ib.Reverse != nil || ib.WireGuardSlot != 0) {
@@ -213,12 +213,27 @@ func (n *Node) ValidatePrivateAccessNode() error {
 			}
 		}
 	}
+	directOnly := false
+	for _, ib := range n.Inbounds {
+		p := ib.PrivateAccess
+		if p.Enabled() && !p.CoreOnly() && !(p.Enforcement == "auto" && p.AllowCoreOnly) {
+			directOnly = true
+		}
+	}
+	for _, c := range n.ReverseClients {
+		if c.PrivateAccess.Enabled() {
+			directOnly = true
+		}
+	}
 	for _, o := range n.Outbounds {
-		if o.Remote != nil || o.WARP != nil || o.Balancer != nil || o.ProxyTag != "" || (o.Protocol != "direct" && o.Protocol != "freedom") {
+		if directOnly && (o.Remote != nil || o.WARP != nil || o.Balancer != nil || o.ProxyTag != "" || (o.Protocol != "direct" && o.Protocol != "freedom")) {
 			return fmt.Errorf("private access currently requires direct exits (OS WireGuard routes are supported); proxy chains, WARP and balancers are unsupported")
 		}
 		// Keep only fields which cannot redirect the target or replace a mark.
 		for k := range o.Settings {
+			if !directOnly && o.Protocol != "direct" && o.Protocol != "freedom" {
+				continue
+			}
 			switch k {
 			case "domain_strategy", "domainStrategy", "inet4_bind_address", "inet6_bind_address", "bind_interface":
 			default:
@@ -233,7 +248,7 @@ func (n *Node) ValidatePrivateAccessNode() error {
 	// rule format. Do not weaken it by silently dropping one condition.
 	for _, r := range n.Routes {
 		for _, m := range r.Match {
-			if strings.HasPrefix(m, "geoip:") {
+			if directOnly && strings.HasPrefix(m, "geoip:") {
 				return fmt.Errorf("private access does not support geoip route matches; use explicit CIDRs")
 			}
 		}
@@ -261,7 +276,7 @@ func (n *Node) PrivateGrants(users []User) ([]PrivateGrant, error) {
 			tag = ShadowTLSTag(tag)
 		}
 		for _, u := range ib.EffectiveUsers(users) {
-			if n.EffectiveSpeedLimit(u) > 0 {
+			if !ib.PrivateAccess.CoreOnly() && n.EffectiveSpeedLimit(u) > 0 {
 				grants = append(grants, PrivateGrant{CoreOnly: ib.PrivateAccess.CoreOnly(), Inbound: tag, UserID: u.ID, UserName: privateAuthName(ib, u), Rules: ib.PrivateAccess.EffectiveRules()})
 			}
 		}
@@ -337,4 +352,44 @@ func (n *Node) ResolvePrivateAccessIntent(guardDisabled bool) (*Node, error) {
 		cp.Inbounds[i].PrivateAccess = p
 	}
 	return &cp, nil
+}
+
+// PrivateAccessNeedsSplitRouting identifies topology unsupported by old direct-only policy compilers.
+func (n *Node) PrivateAccessNeedsSplitRouting() bool {
+	for _, o := range n.Outbounds {
+		if o.Remote != nil || o.WARP != nil || o.Balancer != nil || o.ProxyTag != "" || (o.Protocol != "direct" && o.Protocol != "freedom") {
+			return true
+		}
+	}
+	for _, r := range n.Routes {
+		for _, m := range r.Match {
+			if strings.HasPrefix(m, "geoip:") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ValidatePrivateAccessRouting gates the expanded combination on reported runtime
+// capability, not a version guess. It does not mutate stored automatic intent.
+func (n *Node) ValidatePrivateAccessRouting(candidates []CoreCandidate) error {
+	if !n.PrivateAccessNeedsSplitRouting() {
+		return nil
+	}
+	for _, ib := range n.Inbounds {
+		if !ib.PrivateAccess.Enabled() {
+			continue
+		}
+		var compatible []CoreCandidate
+		for _, c := range candidates {
+			if c.Capabilities.CoreOnlyPrivateAccess && c.Capabilities.PrivateAccessPolicy != nil && c.Capabilities.PrivateAccessPolicy.SplitRouting {
+				compatible = append(compatible, c)
+			}
+		}
+		if _, err := SelectCore(ib, compatible); err != nil {
+			return fmt.Errorf("private access with split routing requires a fresh upgraded sing-box/Extended core-only capability report and disabled egress guard")
+		}
+	}
+	return nil
 }

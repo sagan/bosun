@@ -9,7 +9,7 @@ func (a *Agent) CoreCandidates() []spec.CoreCandidate {
 	out := a.reg.Candidates()
 	for i := range out {
 		if out[i].Capabilities.PrivateAccess {
-			out[i].Capabilities.PrivateAccessPolicy = &spec.PrivateAccessPolicyCapabilities{Scoped: true, IndependentDNS: out[i].Capabilities.CoreOnlyPrivateAccess}
+			out[i].Capabilities.PrivateAccessPolicy = &spec.PrivateAccessPolicyCapabilities{Scoped: true, SplitRouting: out[i].Capabilities.CoreOnlyPrivateAccess, IndependentDNS: out[i].Capabilities.CoreOnlyPrivateAccess}
 		}
 		out[i].Capabilities.CoreOnlyPrivateAccess = out[i].Capabilities.CoreOnlyPrivateAccess && a.coreOnlyPrivateAccessReady()
 		// Never advertise a transport that this installation cannot enforce.

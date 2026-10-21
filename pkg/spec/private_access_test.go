@@ -126,3 +126,45 @@ func TestAutomaticIntentDoesNotPersistRuntimeMode(t *testing.T) {
 		t.Fatal("guard re-enable left stale core-only mode", e)
 	}
 }
+
+func TestCoreOnlySplitRoutingGate(t *testing.T) {
+	p := &PrivateAccess{Mode: "internal", Enforcement: "auto", AllowCoreOnly: true}
+	ib := Inbound{Tag: "in", Protocol: VLESS, Core: "singbox", PrivateAccess: p}
+	n := &Node{Inbounds: []Inbound{ib}, Outbounds: []Outbound{{Tag: "warp", WARP: &WARP{FromNode: true}}, {Tag: "proxy", Protocol: "socks"}, {Tag: "pool", Balancer: &Balancer{Members: []string{"proxy"}}}}}
+	if err := n.ValidatePrivateAccessNode(); err != nil {
+		t.Fatal(err)
+	}
+	c := CapabilitiesForCore("singbox")
+	c.PrivateAccessPolicy = &PrivateAccessPolicyCapabilities{Scoped: true, IndependentDNS: true}
+	c.PrivateAccessReadiness = &PrivateAccessReadiness{EffectiveMode: "core_only"}
+	candidates := []CoreCandidate{{Name: "singbox", Capabilities: c}}
+	if n.ValidatePrivateAccessRouting(candidates) == nil {
+		t.Fatal("old compiler allowed")
+	}
+	candidates[0].Capabilities.PrivateAccessPolicy.SplitRouting = true
+	if err := n.ValidatePrivateAccessRouting(candidates); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := n.ResolvePrivateAccessIntent(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = resolved.ValidatePrivateAccessNode(); err != nil {
+		t.Fatal(err)
+	}
+	dual, err := n.ResolvePrivateAccessIntent(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dual.ValidatePrivateAccessNode() == nil {
+		t.Fatal("dual mode silently allowed remote exits")
+	}
+	candidates[0].Capabilities.CoreOnlyPrivateAccess = false
+	if n.ValidatePrivateAccessRouting(candidates) == nil {
+		t.Fatal("runtime gate bypassed")
+	}
+	resolved.Outbounds = []Outbound{{Tag: "escape", Protocol: "direct", Settings: map[string]any{"override_address": "127.0.0.1"}}}
+	if resolved.ValidatePrivateAccessNode() == nil {
+		t.Fatal("target rewriting bypasses authorization")
+	}
+}

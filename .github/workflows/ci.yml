@@ -40,6 +40,11 @@ jobs:
           sudo apt-get install -y nftables iproute2 util-linux python3 openssl wireguard-tools
           go test -c ./internal/privateintegration -o /tmp/bosun-private.test
           sudo env BOSUN_NFT_TEST=1 BOSUN_TEST_DOWNLOAD_CORES=1 /tmp/bosun-private.test -test.run '^TestPrivateAccessLinuxCores$' -test.v -test.timeout 15m
+      - name: Isolated UFW forwarding ownership and packet flow
+        run: |
+          sudo apt-get install -y ufw
+          go test -c ./internal/wgfirewall -o /tmp/bosun-wgfirewall.test
+          sudo env BOSUN_WG_FIREWALL_TEST=1 /tmp/bosun-wgfirewall.test -test.run '^TestUFWForwardingLinux$' -test.v -test.timeout 3m
       - name: Real reverse WireGuard and shared subscriber accounting
         run: |
           go test -c ./internal/reversewg -o /tmp/bosun-reversewg.test
